@@ -1,6 +1,6 @@
 # PDF-StitchUI
 
-`PDF-StitchUI` is a desktop Java application for rearranging PDFs visually and for splitting one PDF into multiple outputs with allocation validation.
+`PDF-StitchUI` is a desktop Java application for stitching multiple PDFs into one ordered output and for splitting one PDF into multiple outputs with allocation validation.
 
 It is built for native desktop use rather than the browser. On Windows, the app uses native file dialogs where standard Java supports them, so common shell locations such as OneDrive are available during file open and save flows.
 
@@ -8,7 +8,7 @@ It is built for native desktop use rather than the browser. On Windows, the app 
 
 `PDF-StitchUI` has two primary modes:
 
-- `Stitch`: combine many PDFs into one output PDF
+- `Stitch`: combine many PDFs into one output PDF with visual tile-based sequencing
 - `Split`: break one PDF into many output PDFs
 
 Both workflows are designed around validation before export so users can catch issues before writing files.
@@ -17,6 +17,7 @@ Both workflows are designed around validation before export so users can catch i
 
 ### Stitch Mode
 
+- Add multiple PDFs and build one final stitched document.
 - Add one or more PDF files with a native file picker.
 - Add a folder and recursively collect all PDFs inside it.
 - Drag PDF files or folders from Explorer directly onto the window.
@@ -124,6 +125,22 @@ For native packaging:
 
 - `jpackage`
 - platform-specific packaging dependencies
+
+## Releases
+
+The current public release is [v1.0.0](https://github.com/AmesInc/PDF-StitchUI/releases/tag/v1.0.0).
+
+Release assets include:
+
+- `pdf-stitchui-1.0.0.jar`: runnable shaded jar
+- `pdf-stitchui-jar.zip`: zipped jar distribution
+- `native-windows-latest.zip`: Windows native package bundle
+- `native-macos-latest.zip`: macOS native package bundle
+- `native-ubuntu-latest.zip`: Linux native package bundle
+
+If you only want to run the app and already have Java 21 installed, download the jar and run it directly.
+
+If you want an OS-specific packaged app, download the native zip for your platform and unpack it locally.
 
 ## Quick Start
 
