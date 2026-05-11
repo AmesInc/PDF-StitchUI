@@ -5,6 +5,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 
 final class PageRangeParser {
+    private static final String VALID_PAGE_SPEC_PATTERN = "[0-9,\\-\\s]+";
+
     private PageRangeParser() {
     }
 
@@ -20,6 +22,10 @@ final class PageRangeParser {
                 allPages.add(index);
             }
             return List.copyOf(allPages);
+        }
+
+        if (!spec.matches(VALID_PAGE_SPEC_PATTERN)) {
+            throw new IllegalArgumentException("Page selection accepts only numbers, commas, spaces, and hyphens.");
         }
 
         LinkedHashSet<Integer> pages = new LinkedHashSet<>();

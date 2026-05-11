@@ -29,6 +29,7 @@ import javax.swing.JList;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import javax.swing.JTabbedPane;
 import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
 import javax.swing.ScrollPaneConstants;
@@ -116,6 +117,7 @@ final class PdfStitcherFrame extends JFrame {
     private final JButton clearAllButton = new JButton();
     private final JButton exportButton = new JButton();
     private final TransferHandler fileImportHandler = new FileImportTransferHandler();
+    private final SplitPanel splitPanel = new SplitPanel();
 
     private boolean uiBusy;
     private Path lastDirectory;
@@ -187,11 +189,21 @@ final class PdfStitcherFrame extends JFrame {
         root.setBorder(new EmptyBorder(18, 22, 22, 22));
         root.setBackground(new Color(246, 249, 253));
 
-        root.add(buildHeader(), BorderLayout.NORTH);
-        root.add(buildCenterPanel(), BorderLayout.CENTER);
-        root.add(buildFooter(), BorderLayout.SOUTH);
+        JTabbedPane tabbedPane = new JTabbedPane();
+        tabbedPane.addTab("Stitch", buildStitchPanel());
+        tabbedPane.addTab("Split", splitPanel);
+        root.add(tabbedPane, BorderLayout.CENTER);
 
         setContentPane(root);
+    }
+
+    private JComponent buildStitchPanel() {
+        JPanel stitchPanel = new JPanel(new BorderLayout(0, 18));
+        stitchPanel.setOpaque(false);
+        stitchPanel.add(buildHeader(), BorderLayout.NORTH);
+        stitchPanel.add(buildCenterPanel(), BorderLayout.CENTER);
+        stitchPanel.add(buildFooter(), BorderLayout.SOUTH);
+        return stitchPanel;
     }
 
     private JComponent buildHeader() {
