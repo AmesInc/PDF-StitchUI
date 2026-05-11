@@ -131,14 +131,14 @@ For native packaging:
 
 ```powershell
 .\mvnw.cmd package
-java -jar .\target\pdf-stitchui-1.0.0-SNAPSHOT.jar
+java -jar .\target\pdf-stitchui-1.0.0.jar
 ```
 
 ### macOS or Linux
 
 ```bash
 ./mvnw package
-java -jar ./target/pdf-stitchui-1.0.0-SNAPSHOT.jar
+java -jar ./target/pdf-stitchui-1.0.0.jar
 ```
 
 ## Development Workflow
@@ -152,7 +152,7 @@ java -jar ./target/pdf-stitchui-1.0.0-SNAPSHOT.jar
 ### Run
 
 ```powershell
-java -jar .\target\pdf-stitchui-1.0.0-SNAPSHOT.jar
+java -jar .\target\pdf-stitchui-1.0.0.jar
 ```
 
 ### Smoke Test Areas

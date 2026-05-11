@@ -1,9 +1,10 @@
 $ErrorActionPreference = "Stop"
 
 $pom = [xml](Get-Content "pom.xml")
+$artifactId = $pom.project.artifactId
 $projectVersion = $pom.project.version
 $appVersion = $projectVersion -replace "-SNAPSHOT$", ""
-$jarPath = "pdf-stitchui-1.0.0-SNAPSHOT.jar"
+$jarPath = "$artifactId-$projectVersion.jar"
 $outputDir = "dist\windows"
 $inputDir = "dist\_jpackage-input"
 $commonArgs = @(
@@ -30,7 +31,7 @@ if (Test-Path $inputDir) {
 
 New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
 New-Item -ItemType Directory -Force -Path $inputDir | Out-Null
-Copy-Item "target\pdf-stitchui-1.0.0-SNAPSHOT.jar" $inputDir
+Copy-Item "target\$jarPath" $inputDir
 
 & jpackage "--type" "app-image" @commonArgs
 

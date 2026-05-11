@@ -14,7 +14,7 @@ Use [linux/package.sh](C:/Users/ameli/OneDrive/Documents/New%20project%202/packa
 
 ## Versioning
 
-The scripts derive the app version from the Maven project version and strip `-SNAPSHOT` when packaging.
+The packaging scripts derive the Maven version from `pom.xml`, strip `-SNAPSHOT` for the app version shown in package metadata, and derive the jar filename from the current Maven `artifactId` and full project version.
 
 ## Signing
 
