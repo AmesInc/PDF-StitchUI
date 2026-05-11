@@ -1,9 +1,17 @@
 package com.ameli.pdfstitcher;
 
-import org.apache.pdfbox.multipdf.PDFMergerUtility;
+import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.pdfwriter.compress.CompressParameters;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDDocumentInformation;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.PDPageTree;
+import org.apache.pdfbox.pdmodel.interactive.documentnavigation.destination.PDPageFitDestination;
+import org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.PDDocumentOutline;
+import org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.PDOutlineItem;
+import org.apache.pdfbox.pdmodel.interactive.form.PDAcroForm;
+import org.apache.pdfbox.pdmodel.encryption.InvalidPasswordException;
 import org.apache.pdfbox.rendering.PDFRenderer;
-import org.apache.pdfbox.io.MemoryUsageSetting;
 
 import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
@@ -11,7 +19,9 @@ import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.DefaultListModel;
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
 import javax.swing.JComponent;
+import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JList;
@@ -23,16 +33,20 @@ import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
 import javax.swing.ScrollPaneConstants;
 import javax.swing.SwingConstants;
+import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
+import javax.swing.Timer;
 import javax.swing.TransferHandler;
 import javax.swing.UIManager;
 import javax.swing.border.EmptyBorder;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Cursor;
+import java.awt.Desktop;
 import java.awt.Dimension;
 import java.awt.FileDialog;
 import java.awt.Font;
+import java.awt.Graphics2D;
 import java.awt.Image;
 import java.awt.Point;
 import java.awt.Rectangle;
@@ -42,31 +56,70 @@ import java.awt.datatransfer.Transferable;
 import java.awt.datatransfer.UnsupportedFlavorException;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.AccessDeniedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.prefs.Preferences;
+import java.util.stream.Stream;
 
 final class PdfStitcherFrame extends JFrame {
+    private static final String PREF_LAST_DIRECTORY = "lastDirectory";
+    private static final String PREF_SESSION_ROWS = "sessionRows";
+
+    private final Preferences preferences = Preferences.userNodeForPackage(PdfStitcherFrame.class);
+    private final ExecutorService thumbnailExecutor = new ThreadPoolExecutor(
+            2,
+            2,
+            30L,
+            TimeUnit.SECONDS,
+            new ArrayBlockingQueue<>(32),
+            new TileWorkerThreadFactory(),
+            new ThreadPoolExecutor.CallerRunsPolicy()
+    );
+
     private final DefaultListModel<PdfEntry> listModel = new DefaultListModel<>();
-    private final JList<PdfEntry> pdfList = new JList<>(listModel);
+    private final PdfTileList pdfList = new PdfTileList(listModel);
     private final JPanel centerPanel = new JPanel(new BorderLayout());
     private final JScrollPane listScrollPane = new JScrollPane(pdfList);
     private final JLabel emptyStateLabel = new JLabel();
-    private final JLabel statusLabel = new JLabel("Add PDF files to start your sequence.");
+    private final JLabel statusLabel = new JLabel("Starting PDF-StitchUI...");
     private final JButton addButton = new JButton("Add PDFs");
+    private final JButton addFolderButton = new JButton("Add Folder");
+    private final JButton duplicateButton = new JButton("Duplicate");
+    private final JButton pageRangeButton = new JButton("Set Pages");
+    private final JButton rotateLeftButton = new JButton("Rotate Left");
+    private final JButton rotateRightButton = new JButton("Rotate Right");
+    private final JButton moveLeftButton = new JButton("Move Left");
+    private final JButton moveRightButton = new JButton("Move Right");
+    private final JButton removeSelectedButton = new JButton("Remove Selected");
+    private final JButton clearAllButton = new JButton("Clear All");
     private final JButton exportButton = new JButton("Export Stitched PDF");
     private final TransferHandler fileImportHandler = new FileImportTransferHandler();
+
+    private boolean uiBusy;
     private Path lastDirectory;
 
     PdfStitcherFrame() {
-        super("PDF Tile Stitcher");
+        super("PDF-StitchUI");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setMinimumSize(new Dimension(1080, 760));
-        setPreferredSize(new Dimension(1240, 860));
+        setMinimumSize(new Dimension(1180, 820));
+        setPreferredSize(new Dimension(1360, 900));
 
         buildFrame();
         registerInteractions();
@@ -74,6 +127,54 @@ final class PdfStitcherFrame extends JFrame {
 
         pack();
         setLocationRelativeTo(null);
+    }
+
+    void restoreSessionAsync() {
+        String storedDirectory = preferences.get(PREF_LAST_DIRECTORY, null);
+        if (storedDirectory != null && !storedDirectory.isBlank()) {
+            lastDirectory = Path.of(storedDirectory);
+        }
+
+        String storedRows = preferences.get(PREF_SESSION_ROWS, "");
+        if (storedRows.isBlank()) {
+            setBusy(false, "Add PDF files, add a folder, or drag them into the window.");
+            return;
+        }
+
+        List<SessionRow> rows = storedRows.lines()
+                .map(SessionRow::parse)
+                .filter(row -> row != null && Files.exists(row.path()))
+                .toList();
+
+        if (rows.isEmpty()) {
+            setBusy(false, "Add PDF files, add a folder, or drag them into the window.");
+            return;
+        }
+
+        setBusy(true, "Restoring last session...");
+        SwingUtilities.invokeLater(() -> {
+            addSessionRows(rows, listModel.size());
+            setBusy(false, rows.size() == 1
+                    ? "Restored 1 tile from the last session."
+                    : "Restored " + rows.size() + " tiles from the last session.");
+        });
+    }
+
+    void activateWindow() {
+        if (!isVisible()) {
+            return;
+        }
+
+        if ((getExtendedState() & JFrame.ICONIFIED) != 0) {
+            setExtendedState(JFrame.NORMAL);
+        }
+
+        toFront();
+        requestFocus();
+        setAlwaysOnTop(true);
+        Timer timer = new Timer(1200, event -> setAlwaysOnTop(false));
+        timer.setRepeats(false);
+        timer.start();
     }
 
     private void buildFrame() {
@@ -93,10 +194,10 @@ final class PdfStitcherFrame extends JFrame {
         wrapper.setOpaque(false);
         wrapper.setLayout(new BoxLayout(wrapper, BoxLayout.Y_AXIS));
 
-        JLabel title = new JLabel("PDF Stitcher");
+        JLabel title = new JLabel("PDF-StitchUI");
         title.setFont(title.getFont().deriveFont(Font.BOLD, 28f));
 
-        JLabel subtitle = new JLabel("Arrange PDF tiles in the order you want, then export one stitched file.");
+        JLabel subtitle = new JLabel("Tile, tune, reorder, and export PDFs with page ranges, rotation, and save-time options.");
         subtitle.setForeground(new Color(84, 96, 115));
         subtitle.setBorder(BorderFactory.createEmptyBorder(6, 0, 14, 0));
 
@@ -105,17 +206,47 @@ final class PdfStitcherFrame extends JFrame {
         toolbar.setFloatable(false);
         toolbar.setBorder(BorderFactory.createEmptyBorder());
 
-        addButton.setFocusable(false);
-        exportButton.setFocusable(false);
+        for (JButton button : List.of(
+                addButton,
+                addFolderButton,
+                duplicateButton,
+                pageRangeButton,
+                rotateLeftButton,
+                rotateRightButton,
+                moveLeftButton,
+                moveRightButton,
+                removeSelectedButton,
+                clearAllButton,
+                exportButton
+        )) {
+            button.setFocusable(false);
+        }
 
         toolbar.add(addButton);
-        toolbar.add(Box.createHorizontalStrut(10));
+        toolbar.add(Box.createHorizontalStrut(8));
+        toolbar.add(addFolderButton);
+        toolbar.add(Box.createHorizontalStrut(16));
+        toolbar.add(duplicateButton);
+        toolbar.add(Box.createHorizontalStrut(8));
+        toolbar.add(pageRangeButton);
+        toolbar.add(Box.createHorizontalStrut(8));
+        toolbar.add(rotateLeftButton);
+        toolbar.add(Box.createHorizontalStrut(8));
+        toolbar.add(rotateRightButton);
+        toolbar.add(Box.createHorizontalStrut(16));
+        toolbar.add(moveLeftButton);
+        toolbar.add(Box.createHorizontalStrut(8));
+        toolbar.add(moveRightButton);
+        toolbar.add(Box.createHorizontalStrut(16));
+        toolbar.add(removeSelectedButton);
+        toolbar.add(Box.createHorizontalStrut(8));
+        toolbar.add(clearAllButton);
+        toolbar.add(Box.createHorizontalStrut(16));
         toolbar.add(exportButton);
 
         wrapper.add(title);
         wrapper.add(subtitle);
         wrapper.add(toolbar);
-
         return wrapper;
     }
 
@@ -125,7 +256,7 @@ final class PdfStitcherFrame extends JFrame {
         pdfList.setVisibleRowCount(-1);
         pdfList.setFixedCellWidth(PdfTileRenderer.CELL_WIDTH);
         pdfList.setFixedCellHeight(PdfTileRenderer.CELL_HEIGHT);
-        pdfList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        pdfList.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
         pdfList.setOpaque(false);
         pdfList.setBackground(new Color(246, 249, 253));
         pdfList.setSelectionBackground(new Color(246, 249, 253));
@@ -143,9 +274,12 @@ final class PdfStitcherFrame extends JFrame {
         emptyStateLabel.setHorizontalAlignment(SwingConstants.CENTER);
         emptyStateLabel.setFont(emptyStateLabel.getFont().deriveFont(Font.PLAIN, 17f));
         emptyStateLabel.setForeground(new Color(99, 109, 126));
-        emptyStateLabel.setText(
-                "<html><div style='text-align:center;'>No PDFs yet.<br/>Use <b>Add PDFs</b> or drag PDF files into this window.</div></html>"
-        );
+        emptyStateLabel.setText("""
+                <html><div style='text-align:center;'>
+                No PDFs yet.<br/>
+                Use <b>Add PDFs</b>, <b>Add Folder</b>, or drag PDF files and folders into this window.
+                </div></html>
+                """);
 
         centerPanel.setOpaque(false);
         centerPanel.setBorder(BorderFactory.createCompoundBorder(
@@ -155,7 +289,6 @@ final class PdfStitcherFrame extends JFrame {
         centerPanel.setTransferHandler(fileImportHandler);
         emptyStateLabel.setTransferHandler(fileImportHandler);
         listScrollPane.setTransferHandler(fileImportHandler);
-
         return centerPanel;
     }
 
@@ -163,55 +296,119 @@ final class PdfStitcherFrame extends JFrame {
         JPanel footer = new JPanel(new BorderLayout());
         footer.setOpaque(false);
         footer.setBorder(BorderFactory.createEmptyBorder(2, 4, 0, 4));
-
         statusLabel.setForeground(new Color(84, 96, 115));
         footer.add(statusLabel, BorderLayout.WEST);
-
         return footer;
     }
 
     private void registerInteractions() {
         addButton.addActionListener(event -> chooseAndAddPdfs());
+        addFolderButton.addActionListener(event -> chooseAndAddFolder());
+        duplicateButton.addActionListener(event -> duplicateSelectedEntries());
+        pageRangeButton.addActionListener(event -> promptPageRangeForSelected());
+        rotateLeftButton.addActionListener(event -> rotateSelectedEntries(-90));
+        rotateRightButton.addActionListener(event -> rotateSelectedEntries(90));
+        moveLeftButton.addActionListener(event -> moveSelectedEntries(-1));
+        moveRightButton.addActionListener(event -> moveSelectedEntries(1));
+        removeSelectedButton.addActionListener(event -> removeSelectedEntries());
+        clearAllButton.addActionListener(event -> clearAllEntries());
         exportButton.addActionListener(event -> exportMergedPdf());
 
+        pdfList.addListSelectionListener(event -> updateActionState());
         pdfList.addMouseListener(new MouseAdapter() {
             @Override
-            public void mouseClicked(MouseEvent event) {
-                int index = pdfList.locationToIndex(event.getPoint());
-                if (index < 0) {
-                    return;
-                }
+            public void mousePressed(MouseEvent event) {
+                updateRemoveHoverState(event.getPoint(), true);
+            }
 
-                Rectangle bounds = pdfList.getCellBounds(index, index);
-                if (bounds != null && removeButtonBounds(bounds).contains(event.getPoint())) {
-                    removeAt(index);
+            @Override
+            public void mouseReleased(MouseEvent event) {
+                if (updateRemoveHoverState(event.getPoint(), false)) {
+                    int index = pdfList.locationToIndex(event.getPoint());
+                    if (index >= 0) {
+                        pdfList.setSelectedIndex(index);
+                        removeSelectedEntries();
+                    }
+                } else {
+                    pdfList.putClientProperty("removePressedIndex", -1);
+                    pdfList.repaint();
                 }
+            }
+
+            @Override
+            public void mouseExited(MouseEvent event) {
+                pdfList.putClientProperty("removeHoverIndex", -1);
+                pdfList.putClientProperty("removePressedIndex", -1);
+                pdfList.repaint();
             }
         });
 
         pdfList.addMouseMotionListener(new MouseAdapter() {
             @Override
             public void mouseMoved(MouseEvent event) {
-                int index = pdfList.locationToIndex(event.getPoint());
-                if (index < 0) {
-                    pdfList.setCursor(Cursor.getDefaultCursor());
-                    return;
-                }
-
-                Rectangle bounds = pdfList.getCellBounds(index, index);
-                boolean overRemove = bounds != null && removeButtonBounds(bounds).contains(event.getPoint());
-                pdfList.setCursor(overRemove ? Cursor.getPredefinedCursor(Cursor.HAND_CURSOR) : Cursor.getDefaultCursor());
+                boolean hoveringRemove = updateRemoveHoverState(event.getPoint(), false);
+                pdfList.setCursor(hoveringRemove
+                        ? Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
+                        : Cursor.getDefaultCursor());
             }
         });
 
         pdfList.getInputMap().put(KeyStroke.getKeyStroke("DELETE"), "removeSelectedPdf");
+        pdfList.getInputMap().put(KeyStroke.getKeyStroke("control O"), "choosePdfFiles");
+        pdfList.getInputMap().put(KeyStroke.getKeyStroke("control shift O"), "choosePdfFolder");
+        pdfList.getInputMap().put(KeyStroke.getKeyStroke("control D"), "duplicateSelected");
+        pdfList.getInputMap().put(KeyStroke.getKeyStroke("alt LEFT"), "moveSelectedLeft");
+        pdfList.getInputMap().put(KeyStroke.getKeyStroke("alt RIGHT"), "moveSelectedRight");
+        pdfList.getInputMap().put(KeyStroke.getKeyStroke("control shift S"), "exportMergedPdf");
+
         pdfList.getActionMap().put("removeSelectedPdf", new AbstractAction() {
             @Override
             public void actionPerformed(java.awt.event.ActionEvent event) {
-                int index = pdfList.getSelectedIndex();
-                if (index >= 0) {
-                    removeAt(index);
-                }
+                removeSelectedEntries();
+            }
+        });
+        pdfList.getActionMap().put("choosePdfFiles", new AbstractAction() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent event) {
+                chooseAndAddPdfs();
+            }
+        });
+        pdfList.getActionMap().put("choosePdfFolder", new AbstractAction() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent event) {
+                chooseAndAddFolder();
+            }
+        });
+        pdfList.getActionMap().put("duplicateSelected", new AbstractAction() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent event) {
+                duplicateSelectedEntries();
+            }
+        });
+        pdfList.getActionMap().put("moveSelectedLeft", new AbstractAction() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent event) {
+                moveSelectedEntries(-1);
+            }
+        });
+        pdfList.getActionMap().put("moveSelectedRight", new AbstractAction() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent event) {
+                moveSelectedEntries(1);
+            }
+        });
+        pdfList.getActionMap().put("exportMergedPdf", new AbstractAction() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent event) {
+                exportMergedPdf();
+            }
+        });
+
+        addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent event) {
+                persistSession();
+                thumbnailExecutor.shutdownNow();
             }
         });
     }
@@ -222,8 +419,8 @@ final class PdfStitcherFrame extends JFrame {
         if (lastDirectory != null) {
             dialog.setDirectory(lastDirectory.toString());
         }
-
         dialog.setVisible(true);
+
         File[] files = dialog.getFiles();
         if (files == null || files.length == 0) {
             return;
@@ -231,41 +428,233 @@ final class PdfStitcherFrame extends JFrame {
 
         List<Path> paths = new ArrayList<>();
         for (File file : files) {
-            if (file != null && isPdf(file.toPath())) {
+            if (file != null) {
                 paths.add(file.toPath());
             }
         }
 
-        if (paths.isEmpty()) {
-            JOptionPane.showMessageDialog(this, "Only PDF files can be added.", "Unsupported files", JOptionPane.WARNING_MESSAGE);
+        List<Path> pdfPaths = expandPaths(paths);
+        if (pdfPaths.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "No PDF files were found in the selected items.", "No PDFs found", JOptionPane.WARNING_MESSAGE);
             return;
         }
 
-        lastDirectory = paths.getFirst().getParent();
-        addPdfFiles(paths, listModel.getSize());
+        lastDirectory = pdfPaths.getFirst().getParent();
+        addPdfFiles(pdfPaths, listModel.size());
+    }
+
+    private void chooseAndAddFolder() {
+        JFileChooser chooser = new JFileChooser(lastDirectory == null ? null : lastDirectory.toFile());
+        chooser.setDialogTitle("Add Folder");
+        chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        chooser.setMultiSelectionEnabled(false);
+
+        int result = chooser.showOpenDialog(this);
+        if (result != JFileChooser.APPROVE_OPTION || chooser.getSelectedFile() == null) {
+            return;
+        }
+
+        Path folder = chooser.getSelectedFile().toPath();
+        List<Path> pdfPaths = expandPaths(List.of(folder));
+        if (pdfPaths.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "No PDF files were found in that folder.", "No PDFs found", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        lastDirectory = folder;
+        addPdfFiles(pdfPaths, listModel.size());
     }
 
     private void addPdfFiles(List<Path> paths, int insertIndex) {
-        int position = Math.max(0, Math.min(insertIndex, listModel.getSize()));
-        for (Path path : paths) {
-            PdfEntry entry = new PdfEntry(path.toAbsolutePath());
-            listModel.add(position++, entry);
-            loadThumbnail(entry);
-        }
-
-        refreshState();
-        statusLabel.setText(paths.size() == 1 ? "Added 1 PDF." : "Added " + paths.size() + " PDFs.");
+        List<SessionRow> rows = paths.stream()
+                .map(path -> new SessionRow(path.toAbsolutePath(), "", 0))
+                .toList();
+        addSessionRows(rows, insertIndex);
     }
 
-    private void removeAt(int index) {
-        if (index < 0 || index >= listModel.size()) {
+    private void addSessionRows(List<SessionRow> rows, int insertIndex) {
+        int position = Math.max(0, Math.min(insertIndex, listModel.size()));
+        for (SessionRow row : rows) {
+            PdfEntry entry = new PdfEntry(row.path());
+            entry.setPageRangeSpec(row.pageRangeSpec());
+            while (entry.getRotationDegrees() != Math.floorMod(row.rotationDegrees(), 360)) {
+                entry.rotateRight();
+            }
+            listModel.add(position++, entry);
+            loadEntryDetails(entry);
+        }
+        refreshState();
+        persistSession();
+    }
+
+    private void duplicateSelectedEntries() {
+        int[] selectedIndices = pdfList.getSelectedIndices();
+        if (selectedIndices.length == 0) {
+            Toolkit.getDefaultToolkit().beep();
             return;
         }
 
-        String removedName = listModel.get(index).getDisplayName();
-        listModel.remove(index);
+        int offset = 1;
+        for (int index : selectedIndices) {
+            PdfEntry copy = listModel.get(index).copy();
+            listModel.add(index + offset, copy);
+            offset++;
+        }
+
         refreshState();
-        statusLabel.setText("Removed " + removedName + ".");
+        statusLabel.setText(selectedIndices.length == 1 ? "Duplicated 1 tile." : "Duplicated " + selectedIndices.length + " tiles.");
+        persistSession();
+    }
+
+    private void promptPageRangeForSelected() {
+        List<PdfEntry> selectedEntries = pdfList.getSelectedValuesList();
+        if (selectedEntries.isEmpty()) {
+            Toolkit.getDefaultToolkit().beep();
+            return;
+        }
+
+        if (selectedEntries.stream().anyMatch(PdfEntry::isLoading)) {
+            JOptionPane.showMessageDialog(this, "Wait for the selected PDFs to finish loading before editing page ranges.", "PDFs still loading", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+
+        String defaultValue = selectedEntries.getFirst().getPageRangeSpec();
+        String input = JOptionPane.showInputDialog(
+                this,
+                "Enter the page range to export for the selected tiles.\nExamples: 1-3, 5, 8-10\nLeave blank to use all pages.",
+                defaultValue,
+                JOptionPane.PLAIN_MESSAGE
+        );
+
+        if (input == null) {
+            return;
+        }
+
+        String range = input.trim();
+        for (PdfEntry entry : selectedEntries) {
+            try {
+                PageRangeParser.parse(range, entry.getTotalPages());
+            } catch (IllegalArgumentException exception) {
+                JOptionPane.showMessageDialog(
+                        this,
+                        "The range is invalid for " + entry.getDisplayName() + ".\n\n" + exception.getMessage(),
+                        "Invalid page range",
+                        JOptionPane.ERROR_MESSAGE
+                );
+                return;
+            }
+        }
+
+        for (PdfEntry entry : selectedEntries) {
+            entry.setPageRangeSpec(range);
+        }
+
+        pdfList.repaint();
+        statusLabel.setText(selectedEntries.size() == 1 ? "Updated page range for 1 tile." : "Updated page ranges for " + selectedEntries.size() + " tiles.");
+        persistSession();
+    }
+
+    private void rotateSelectedEntries(int deltaDegrees) {
+        List<PdfEntry> selectedEntries = pdfList.getSelectedValuesList();
+        if (selectedEntries.isEmpty()) {
+            Toolkit.getDefaultToolkit().beep();
+            return;
+        }
+
+        for (PdfEntry entry : selectedEntries) {
+            if (deltaDegrees < 0) {
+                entry.rotateLeft();
+            } else {
+                entry.rotateRight();
+            }
+        }
+
+        pdfList.repaint();
+        statusLabel.setText(selectedEntries.size() == 1 ? "Updated rotation for 1 tile." : "Updated rotation for " + selectedEntries.size() + " tiles.");
+        persistSession();
+    }
+
+    private void moveSelectedEntries(int direction) {
+        int[] selectedIndices = pdfList.getSelectedIndices();
+        if (selectedIndices.length == 0) {
+            Toolkit.getDefaultToolkit().beep();
+            return;
+        }
+
+        List<PdfEntry> entries = toMutableList();
+        boolean[] selected = new boolean[entries.size()];
+        for (int index : selectedIndices) {
+            selected[index] = true;
+        }
+
+        if (direction < 0) {
+            for (int index = 0; index < entries.size(); index++) {
+                if (selected[index] && index > 0 && !selected[index - 1]) {
+                    Collections.swap(entries, index, index - 1);
+                    selected[index - 1] = true;
+                    selected[index] = false;
+                }
+            }
+        } else {
+            for (int index = entries.size() - 1; index >= 0; index--) {
+                if (selected[index] && index < entries.size() - 1 && !selected[index + 1]) {
+                    Collections.swap(entries, index, index + 1);
+                    selected[index + 1] = true;
+                    selected[index] = false;
+                }
+            }
+        }
+
+        int[] newSelection = new int[selectedIndices.length];
+        int selectionCursor = 0;
+        rebuildModel(entries);
+        for (int index = 0; index < selected.length; index++) {
+            if (selected[index]) {
+                newSelection[selectionCursor++] = index;
+            }
+        }
+        pdfList.setSelectedIndices(newSelection);
+        statusLabel.setText("Moved the selected tiles " + (direction < 0 ? "left." : "right."));
+        persistSession();
+    }
+
+    private void removeSelectedEntries() {
+        int[] selectedIndices = pdfList.getSelectedIndices();
+        if (selectedIndices.length == 0) {
+            Toolkit.getDefaultToolkit().beep();
+            return;
+        }
+
+        for (int index = selectedIndices.length - 1; index >= 0; index--) {
+            listModel.remove(selectedIndices[index]);
+        }
+
+        refreshState();
+        statusLabel.setText(selectedIndices.length == 1 ? "Removed 1 tile." : "Removed " + selectedIndices.length + " tiles.");
+        persistSession();
+    }
+
+    private void clearAllEntries() {
+        if (listModel.isEmpty()) {
+            Toolkit.getDefaultToolkit().beep();
+            return;
+        }
+
+        int choice = JOptionPane.showConfirmDialog(
+                this,
+                "Remove every PDF tile from the current collection?",
+                "Clear collection",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.WARNING_MESSAGE
+        );
+        if (choice != JOptionPane.YES_OPTION) {
+            return;
+        }
+
+        listModel.clear();
+        refreshState();
+        statusLabel.setText("Cleared the collection.");
+        persistSession();
     }
 
     private void exportMergedPdf() {
@@ -274,46 +663,32 @@ final class PdfStitcherFrame extends JFrame {
             return;
         }
 
-        FileDialog dialog = new FileDialog(this, "Export Stitched PDF", FileDialog.SAVE);
-        dialog.setFile("stitched.pdf");
-        if (lastDirectory != null) {
-            dialog.setDirectory(lastDirectory.toString());
-        }
-
-        dialog.setVisible(true);
-        if (dialog.getFile() == null) {
+        List<String> blockedEntries = collectBlockedEntries();
+        if (!blockedEntries.isEmpty()) {
+            JOptionPane.showMessageDialog(
+                    this,
+                    "These tiles must be fixed before export:\n\n" + String.join("\n", blockedEntries),
+                    "Export blocked",
+                    JOptionPane.WARNING_MESSAGE
+            );
             return;
         }
 
-        Path destination = Path.of(dialog.getDirectory(), ensurePdfExtension(dialog.getFile()));
-        lastDirectory = destination.getParent();
+        ExportOptions options = showExportOptionsDialog();
+        if (options == null) {
+            return;
+        }
 
-        if (Files.exists(destination)) {
-            int overwrite = JOptionPane.showConfirmDialog(
-                    this,
-                    "Replace the existing file?\n" + destination,
-                    "Confirm overwrite",
-                    JOptionPane.YES_NO_OPTION,
-                    JOptionPane.WARNING_MESSAGE
-            );
-            if (overwrite != JOptionPane.YES_OPTION) {
-                return;
-            }
+        Path destination = chooseExportDestination();
+        if (destination == null) {
+            return;
         }
 
         setBusy(true, "Exporting stitched PDF...");
-
         new SwingWorker<Path, Void>() {
             @Override
             protected Path doInBackground() throws Exception {
-                PDFMergerUtility merger = new PDFMergerUtility();
-                for (int index = 0; index < listModel.size(); index++) {
-                    merger.addSource(listModel.get(index).getPath().toFile());
-                }
-
-                merger.setDestinationFileName(destination.toString());
-                merger.mergeDocuments(MemoryUsageSetting.setupMainMemoryOnly());
-                return destination;
+                return writeExport(destination, options);
             }
 
             @Override
@@ -321,12 +696,7 @@ final class PdfStitcherFrame extends JFrame {
                 try {
                     Path exported = get();
                     setBusy(false, "Exported stitched PDF to " + exported + ".");
-                    JOptionPane.showMessageDialog(
-                            PdfStitcherFrame.this,
-                            "Created stitched PDF:\n" + exported,
-                            "Export complete",
-                            JOptionPane.INFORMATION_MESSAGE
-                    );
+                    offerToOpenExport(exported);
                 } catch (Exception exception) {
                     setBusy(false, "Export failed.");
                     JOptionPane.showMessageDialog(
@@ -340,36 +710,216 @@ final class PdfStitcherFrame extends JFrame {
         }.execute();
     }
 
-    private void loadThumbnail(PdfEntry entry) {
-        new SwingWorker<BufferedImage, Void>() {
-            @Override
-            protected BufferedImage doInBackground() throws Exception {
-                try (PDDocument document = PDDocument.load(entry.getPath().toFile())) {
+    private ExportOptions showExportOptionsDialog() {
+        JCheckBox bookmarksBox = new JCheckBox("Create bookmarks for each tile", true);
+        JCheckBox flattenFormsBox = new JCheckBox("Flatten PDF forms before export", false);
+        JCheckBox compressBox = new JCheckBox("Compress the output PDF", true);
+
+        JPanel panel = new JPanel();
+        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+        panel.add(new JLabel("Choose export settings:"));
+        panel.add(Box.createVerticalStrut(8));
+        panel.add(bookmarksBox);
+        panel.add(Box.createVerticalStrut(6));
+        panel.add(flattenFormsBox);
+        panel.add(Box.createVerticalStrut(6));
+        panel.add(compressBox);
+
+        int result = JOptionPane.showConfirmDialog(
+                this,
+                panel,
+                "Export settings",
+                JOptionPane.OK_CANCEL_OPTION,
+                JOptionPane.PLAIN_MESSAGE
+        );
+
+        if (result != JOptionPane.OK_OPTION) {
+            return null;
+        }
+
+        return new ExportOptions(bookmarksBox.isSelected(), flattenFormsBox.isSelected(), compressBox.isSelected());
+    }
+
+    private Path chooseExportDestination() {
+        while (true) {
+            FileDialog dialog = new FileDialog(this, "Export Stitched PDF", FileDialog.SAVE);
+            dialog.setFile("stitched.pdf");
+            if (lastDirectory != null) {
+                dialog.setDirectory(lastDirectory.toString());
+            }
+
+            dialog.setVisible(true);
+            if (dialog.getFile() == null) {
+                return null;
+            }
+
+            Path destination = Path.of(dialog.getDirectory(), ensurePdfExtension(dialog.getFile()));
+            lastDirectory = destination.getParent();
+
+            if (!Files.exists(destination)) {
+                return destination;
+            }
+
+            Object[] options = {"Replace", "Choose Another File", "Cancel"};
+            int choice = JOptionPane.showOptionDialog(
+                    this,
+                    "The file already exists:\n" + destination + "\n\nChoose whether to replace it or pick a different name.",
+                    "Confirm overwrite",
+                    JOptionPane.DEFAULT_OPTION,
+                    JOptionPane.WARNING_MESSAGE,
+                    null,
+                    options,
+                    options[0]
+            );
+
+            if (choice == 0) {
+                return destination;
+            }
+            if (choice != 1) {
+                return null;
+            }
+        }
+    }
+
+    private Path writeExport(Path destination, ExportOptions options) throws IOException {
+        Path temporaryFile = Files.createTempFile(destination.getParent(), "pdf-stitchui-", ".pdf");
+
+        try (PDDocument destinationDocument = new PDDocument()) {
+            destinationDocument.setDocumentInformation(new PDDocumentInformation());
+            destinationDocument.getDocumentInformation().setProducer("PDF-StitchUI");
+
+            PDDocumentOutline outline = options.addBookmarks() ? new PDDocumentOutline() : null;
+            if (outline != null) {
+                destinationDocument.getDocumentCatalog().setDocumentOutline(outline);
+            }
+
+            for (int index = 0; index < listModel.size(); index++) {
+                PdfEntry entry = listModel.get(index);
+                importEntry(destinationDocument, outline, entry, options);
+            }
+
+            if (outline != null) {
+                outline.openNode();
+            }
+
+            CompressParameters compression = options.compressOutput()
+                    ? CompressParameters.DEFAULT_COMPRESSION
+                    : CompressParameters.NO_COMPRESSION;
+            destinationDocument.save(temporaryFile.toFile(), compression);
+        } catch (IOException exception) {
+            Files.deleteIfExists(temporaryFile);
+            throw exception;
+        }
+
+        Files.move(temporaryFile, destination, StandardCopyOption.REPLACE_EXISTING);
+        return destination;
+    }
+
+    private void importEntry(PDDocument destinationDocument, PDDocumentOutline outline, PdfEntry entry, ExportOptions options) throws IOException {
+        try (PDDocument sourceDocument = Loader.loadPDF(entry.getPath().toFile())) {
+            if (options.flattenForms()) {
+                PDAcroForm acroForm = sourceDocument.getDocumentCatalog().getAcroForm();
+                if (acroForm != null) {
+                    acroForm.flatten();
+                }
+            }
+
+            PDPage bookmarkPage = null;
+            for (Integer pageIndex : entry.getSelectedPages()) {
+                PDPage sourcePage = sourceDocument.getPage(pageIndex);
+                PDPage importedPage = destinationDocument.importPage(sourcePage);
+                importedPage.setRotation(Math.floorMod(sourcePage.getRotation() + entry.getRotationDegrees(), 360));
+                if (bookmarkPage == null) {
+                    bookmarkPage = importedPage;
+                }
+            }
+
+            if (outline != null && bookmarkPage != null) {
+                PDPageFitDestination pageDestination = new PDPageFitDestination();
+                pageDestination.setPage(bookmarkPage);
+
+                PDOutlineItem item = new PDOutlineItem();
+                item.setDestination(pageDestination);
+                item.setTitle(buildBookmarkTitle(entry));
+                outline.addLast(item);
+            }
+        }
+    }
+
+    private String buildBookmarkTitle(PdfEntry entry) {
+        StringBuilder title = new StringBuilder(entry.getDisplayName());
+        if (!entry.getPageRangeSpec().isBlank()) {
+            title.append(" [").append(entry.getPageRangeSpec()).append(']');
+        }
+        if (entry.getRotationDegrees() != 0) {
+            title.append(" (").append(entry.getRotationDegrees()).append("\u00b0)");
+        }
+        return title.toString();
+    }
+
+    private void loadEntryDetails(PdfEntry entry) {
+        thumbnailExecutor.submit(() -> {
+            long fileSize = -1L;
+            try {
+                fileSize = Files.size(entry.getPath());
+                try (PDDocument document = Loader.loadPDF(entry.getPath().toFile())) {
                     if (document.getNumberOfPages() == 0) {
                         throw new IOException("The PDF has no pages.");
                     }
 
                     PDFRenderer renderer = new PDFRenderer(document);
-                    return renderer.renderImageWithDPI(0, 120);
+                    BufferedImage preview = renderer.renderImageWithDPI(0, 120);
+                    Image scaled = scaleToTile(preview);
+                    boolean encrypted = document.isEncrypted();
+                    long finalFileSize = fileSize;
+                    SwingUtilities.invokeLater(() -> {
+                        entry.applyLoadSuccess(new javax.swing.ImageIcon(scaled), document.getNumberOfPages(), finalFileSize, encrypted);
+                        pdfList.repaint();
+                        persistSession();
+                    });
                 }
+            } catch (InvalidPasswordException exception) {
+                long finalFileSize = fileSize;
+                SwingUtilities.invokeLater(() -> {
+                    entry.applyLoadFailure("Password-protected PDF", finalFileSize);
+                    pdfList.repaint();
+                    persistSession();
+                });
+            } catch (AccessDeniedException exception) {
+                long finalFileSize = fileSize;
+                SwingUtilities.invokeLater(() -> {
+                    entry.applyLoadFailure("Permission denied", finalFileSize);
+                    pdfList.repaint();
+                    persistSession();
+                });
+            } catch (IOException exception) {
+                String message = classifyIOException(exception);
+                long finalFileSize = fileSize;
+                SwingUtilities.invokeLater(() -> {
+                    entry.applyLoadFailure(message, finalFileSize);
+                    pdfList.repaint();
+                    persistSession();
+                });
             }
+        });
+    }
 
-            @Override
-            protected void done() {
-                try {
-                    BufferedImage image = get();
-                    entry.setThumbnail(new javax.swing.ImageIcon(scaleToTile(image)));
-                } catch (Exception exception) {
-                    entry.setThumbnailError("Preview unavailable");
-                }
-
-                pdfList.repaint();
-            }
-        }.execute();
+    private String classifyIOException(IOException exception) {
+        String message = exception.getMessage() == null ? "" : exception.getMessage().toLowerCase();
+        if (message.contains("password")) {
+            return "Password-protected PDF";
+        }
+        if (message.contains("permission")) {
+            return "Permission denied";
+        }
+        if (message.contains("header") || message.contains("xref") || message.contains("trailer")) {
+            return "Malformed PDF";
+        }
+        return "Unreadable PDF";
     }
 
     private Image scaleToTile(BufferedImage image) {
-        int maxWidth = 170;
+        int maxWidth = 180;
         int maxHeight = 188;
         double scale = Math.min((double) maxWidth / image.getWidth(), (double) maxHeight / image.getHeight());
         scale = Math.min(scale, 1.0d);
@@ -382,18 +932,57 @@ final class PdfStitcherFrame extends JFrame {
     private void refreshState() {
         centerPanel.removeAll();
         centerPanel.add(listModel.isEmpty() ? emptyStateLabel : listScrollPane, BorderLayout.CENTER);
-
-        exportButton.setEnabled(!listModel.isEmpty());
+        updateActionState();
         centerPanel.revalidate();
         centerPanel.repaint();
     }
 
     private void setBusy(boolean busy, String message) {
+        uiBusy = busy;
         addButton.setEnabled(!busy);
+        addFolderButton.setEnabled(!busy);
+        duplicateButton.setEnabled(!busy && !pdfList.isSelectionEmpty());
+        pageRangeButton.setEnabled(!busy && !pdfList.isSelectionEmpty());
+        rotateLeftButton.setEnabled(!busy && !pdfList.isSelectionEmpty());
+        rotateRightButton.setEnabled(!busy && !pdfList.isSelectionEmpty());
+        moveLeftButton.setEnabled(!busy && !pdfList.isSelectionEmpty());
+        moveRightButton.setEnabled(!busy && !pdfList.isSelectionEmpty());
+        removeSelectedButton.setEnabled(!busy && !pdfList.isSelectionEmpty());
+        clearAllButton.setEnabled(!busy && !listModel.isEmpty());
         exportButton.setEnabled(!busy && !listModel.isEmpty());
         pdfList.setEnabled(!busy);
         statusLabel.setText(message);
         setCursor(busy ? Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR) : Cursor.getDefaultCursor());
+    }
+
+    private void updateActionState() {
+        boolean hasSelection = !pdfList.isSelectionEmpty();
+        duplicateButton.setEnabled(!uiBusy && hasSelection);
+        pageRangeButton.setEnabled(!uiBusy && hasSelection);
+        rotateLeftButton.setEnabled(!uiBusy && hasSelection);
+        rotateRightButton.setEnabled(!uiBusy && hasSelection);
+        moveLeftButton.setEnabled(!uiBusy && hasSelection);
+        moveRightButton.setEnabled(!uiBusy && hasSelection);
+        removeSelectedButton.setEnabled(!uiBusy && hasSelection);
+        clearAllButton.setEnabled(!uiBusy && !listModel.isEmpty());
+        exportButton.setEnabled(!uiBusy && !listModel.isEmpty());
+    }
+
+    private boolean updateRemoveHoverState(Point point, boolean pressed) {
+        int index = pdfList.locationToIndex(point);
+        if (index < 0) {
+            pdfList.putClientProperty("removeHoverIndex", -1);
+            pdfList.putClientProperty("removePressedIndex", -1);
+            pdfList.repaint();
+            return false;
+        }
+
+        Rectangle bounds = pdfList.getCellBounds(index, index);
+        boolean hoveringRemove = bounds != null && removeButtonBounds(bounds).contains(point);
+        pdfList.putClientProperty("removeHoverIndex", hoveringRemove ? index : -1);
+        pdfList.putClientProperty("removePressedIndex", pressed && hoveringRemove ? index : -1);
+        pdfList.repaint();
+        return hoveringRemove;
     }
 
     private Rectangle removeButtonBounds(Rectangle cellBounds) {
@@ -405,6 +994,26 @@ final class PdfStitcherFrame extends JFrame {
         );
     }
 
+    private List<Path> expandPaths(List<Path> inputPaths) {
+        LinkedHashSet<Path> results = new LinkedHashSet<>();
+        for (Path inputPath : inputPaths) {
+            if (Files.isDirectory(inputPath)) {
+                try (Stream<Path> paths = Files.walk(inputPath)) {
+                    paths.filter(Files::isRegularFile)
+                            .filter(this::isPdf)
+                            .sorted(Comparator.comparing(Path::toString, String.CASE_INSENSITIVE_ORDER))
+                            .map(Path::toAbsolutePath)
+                            .forEach(results::add);
+                } catch (IOException exception) {
+                    statusLabel.setText("Could not read folder " + inputPath.getFileName() + ".");
+                }
+            } else if (Files.isRegularFile(inputPath) && isPdf(inputPath)) {
+                results.add(inputPath.toAbsolutePath());
+            }
+        }
+        return new ArrayList<>(results);
+    }
+
     private boolean isPdf(Path path) {
         String fileName = path.getFileName().toString().toLowerCase();
         return fileName.endsWith(".pdf");
@@ -414,14 +1023,84 @@ final class PdfStitcherFrame extends JFrame {
         return fileName.toLowerCase().endsWith(".pdf") ? fileName : fileName + ".pdf";
     }
 
+    private List<String> collectBlockedEntries() {
+        List<String> blockedEntries = new ArrayList<>();
+        for (int index = 0; index < listModel.size(); index++) {
+            PdfEntry entry = listModel.get(index);
+            if (!entry.canExport()) {
+                blockedEntries.add("- " + entry.getDisplayName() + ": " + (entry.getBlockingIssue() == null ? "Still loading" : entry.getBlockingIssue()));
+            }
+        }
+        return blockedEntries;
+    }
+
+    private void offerToOpenExport(Path exportedPath) {
+        Object[] options = {"Open PDF", "Close"};
+        int choice = JOptionPane.showOptionDialog(
+                this,
+                "Created stitched PDF:\n" + exportedPath,
+                "Export complete",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.INFORMATION_MESSAGE,
+                null,
+                options,
+                options[0]
+        );
+
+        if (choice == JOptionPane.YES_OPTION
+                && Desktop.isDesktopSupported()
+                && Desktop.getDesktop().isSupported(Desktop.Action.OPEN)) {
+            try {
+                Desktop.getDesktop().open(exportedPath.toFile());
+            } catch (IOException exception) {
+                JOptionPane.showMessageDialog(
+                        this,
+                        "The PDF was saved, but it could not be opened automatically.\n\n" + exception.getMessage(),
+                        "Open failed",
+                        JOptionPane.WARNING_MESSAGE
+                );
+            }
+        }
+    }
+
+    private void persistSession() {
+        if (lastDirectory != null) {
+            preferences.put(PREF_LAST_DIRECTORY, lastDirectory.toString());
+        }
+
+        StringBuilder builder = new StringBuilder();
+        for (int index = 0; index < listModel.size(); index++) {
+            PdfEntry entry = listModel.get(index);
+            if (builder.length() > 0) {
+                builder.append('\n');
+            }
+            builder.append(SessionRow.serialize(entry));
+        }
+        preferences.put(PREF_SESSION_ROWS, builder.toString());
+    }
+
+    private List<PdfEntry> toMutableList() {
+        List<PdfEntry> entries = new ArrayList<>(listModel.size());
+        for (int index = 0; index < listModel.size(); index++) {
+            entries.add(listModel.get(index));
+        }
+        return entries;
+    }
+
+    private void rebuildModel(List<PdfEntry> entries) {
+        listModel.clear();
+        for (PdfEntry entry : entries) {
+            listModel.addElement(entry);
+        }
+        refreshState();
+    }
+
     private final class PdfListTransferHandler extends TransferHandler {
         private final DataFlavor localEntryFlavor;
 
         PdfListTransferHandler() {
             try {
-                localEntryFlavor = new DataFlavor(
-                        DataFlavor.javaJVMLocalObjectMimeType + ";class=" + DraggedEntry.class.getName()
-                );
+                localEntryFlavor = new DataFlavor(DataFlavor.javaJVMLocalObjectMimeType + ";class=" + DraggedEntry.class.getName());
             } catch (ClassNotFoundException exception) {
                 throw new IllegalStateException("Unable to configure drag-and-drop support.", exception);
             }
@@ -434,25 +1113,29 @@ final class PdfStitcherFrame extends JFrame {
 
         @Override
         protected Transferable createTransferable(JComponent component) {
-            PdfEntry selected = pdfList.getSelectedValue();
-            int sourceIndex = pdfList.getSelectedIndex();
-            if (selected == null || sourceIndex < 0) {
+            int[] selectedIndices = pdfList.getSelectedIndices();
+            if (selectedIndices.length != 1) {
                 return null;
             }
 
-            return new SimpleTransferable(new DraggedEntry(selected, sourceIndex), localEntryFlavor);
+            PdfEntry selected = pdfList.getModel().getElementAt(selectedIndices[0]);
+            return new SimpleTransferable(new DraggedEntry(selected, selectedIndices[0]), localEntryFlavor);
         }
 
         @Override
         public boolean canImport(TransferSupport support) {
             if (support.isDataFlavorSupported(DataFlavor.javaFileListFlavor)) {
                 support.setShowDropLocation(true);
+                pdfList.setDropInsertionIndex(resolveDropIndex(support));
                 return true;
             }
 
             boolean supportsReorder = support.isDrop() && support.isDataFlavorSupported(localEntryFlavor);
             if (supportsReorder) {
                 support.setShowDropLocation(true);
+                pdfList.setDropInsertionIndex(resolveDropIndex(support));
+            } else {
+                pdfList.clearDropInsertionIndex();
             }
             return supportsReorder;
         }
@@ -463,11 +1146,7 @@ final class PdfStitcherFrame extends JFrame {
                 if (support.isDataFlavorSupported(DataFlavor.javaFileListFlavor)) {
                     @SuppressWarnings("unchecked")
                     List<File> droppedFiles = (List<File>) support.getTransferable().getTransferData(DataFlavor.javaFileListFlavor);
-                    List<Path> pdfPaths = droppedFiles.stream()
-                            .map(File::toPath)
-                            .filter(PdfStitcherFrame.this::isPdf)
-                            .toList();
-
+                    List<Path> pdfPaths = expandPaths(droppedFiles.stream().map(File::toPath).toList());
                     if (pdfPaths.isEmpty()) {
                         return false;
                     }
@@ -484,27 +1163,33 @@ final class PdfStitcherFrame extends JFrame {
                     if (targetIndex > listModel.size()) {
                         targetIndex = listModel.size();
                     }
-
                     if (draggedEntry.sourceIndex() < targetIndex) {
                         targetIndex--;
                     }
-
                     if (targetIndex == draggedEntry.sourceIndex()) {
                         return false;
                     }
 
-                    listModel.remove(draggedEntry.sourceIndex());
-                    listModel.add(targetIndex, draggedEntry.entry());
+                    PdfEntry entry = listModel.remove(draggedEntry.sourceIndex());
+                    listModel.add(targetIndex, entry);
                     pdfList.setSelectedIndex(targetIndex);
-                    statusLabel.setText("Moved " + draggedEntry.entry().getDisplayName() + " to sequence " + (targetIndex + 1) + ".");
                     refreshState();
+                    statusLabel.setText("Moved " + draggedEntry.entry().getDisplayName() + " to sequence " + (targetIndex + 1) + ".");
+                    persistSession();
                     return true;
                 }
             } catch (UnsupportedFlavorException | IOException exception) {
                 UIManager.getLookAndFeel().provideErrorFeedback(PdfStitcherFrame.this);
+            } finally {
+                pdfList.clearDropInsertionIndex();
             }
-
             return false;
+        }
+
+        @Override
+        protected void exportDone(JComponent source, Transferable data, int action) {
+            pdfList.clearDropInsertionIndex();
+            super.exportDone(source, data, action);
         }
 
         private int resolveDropIndex(TransferSupport support) {
@@ -529,11 +1214,7 @@ final class PdfStitcherFrame extends JFrame {
             try {
                 @SuppressWarnings("unchecked")
                 List<File> droppedFiles = (List<File>) support.getTransferable().getTransferData(DataFlavor.javaFileListFlavor);
-                List<Path> pdfPaths = droppedFiles.stream()
-                        .map(File::toPath)
-                        .filter(PdfStitcherFrame.this::isPdf)
-                        .toList();
-
+                List<Path> pdfPaths = expandPaths(droppedFiles.stream().map(File::toPath).toList());
                 if (pdfPaths.isEmpty()) {
                     return false;
                 }
@@ -549,6 +1230,27 @@ final class PdfStitcherFrame extends JFrame {
     }
 
     private record DraggedEntry(PdfEntry entry, int sourceIndex) {
+    }
+
+    private record ExportOptions(boolean addBookmarks, boolean flattenForms, boolean compressOutput) {
+    }
+
+    private record SessionRow(Path path, String pageRangeSpec, int rotationDegrees) {
+        static SessionRow parse(String row) {
+            String[] parts = row.split("\t", -1);
+            if (parts.length < 3) {
+                return null;
+            }
+            try {
+                return new SessionRow(Path.of(parts[0]), parts[1], Integer.parseInt(parts[2]));
+            } catch (RuntimeException exception) {
+                return null;
+            }
+        }
+
+        static String serialize(PdfEntry entry) {
+            return entry.getPath() + "\t" + entry.getPageRangeSpec() + "\t" + entry.getRotationDegrees();
+        }
     }
 
     private static final class SimpleTransferable implements Transferable {
@@ -575,8 +1277,18 @@ final class PdfStitcherFrame extends JFrame {
             if (!isDataFlavorSupported(candidateFlavor)) {
                 throw new UnsupportedFlavorException(candidateFlavor);
             }
-
             return value;
+        }
+    }
+
+    private static final class TileWorkerThreadFactory implements ThreadFactory {
+        private int threadCount = 1;
+
+        @Override
+        public Thread newThread(Runnable runnable) {
+            Thread thread = new Thread(runnable, "pdf-stitchui-worker-" + threadCount++);
+            thread.setDaemon(true);
+            return thread;
         }
     }
 }

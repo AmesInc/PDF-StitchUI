@@ -1,0 +1,39 @@
+name: Bug Report
+description: Report a reproducible defect in PDF-StitchUI
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened and what did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: Include the PDFs or conditions needed when possible.
+      placeholder: |
+        1. Open the app
+        2. Add these PDFs
+        3. Change this page range
+        4. Export
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Java version, and how you launched the app
+      placeholder: Windows 11, Java 21, launched from shaded jar
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Extra Notes
+      description: Screenshots, stack traces, or sample PDFs if they can be shared safely
+
