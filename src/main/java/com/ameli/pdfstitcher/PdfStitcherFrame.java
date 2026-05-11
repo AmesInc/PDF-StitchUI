@@ -18,6 +18,7 @@ import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.DefaultListModel;
+import javax.swing.Icon;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComponent;
@@ -28,7 +29,6 @@ import javax.swing.JList;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
-import javax.swing.JToolBar;
 import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
 import javax.swing.ScrollPaneConstants;
@@ -39,15 +39,20 @@ import javax.swing.Timer;
 import javax.swing.TransferHandler;
 import javax.swing.UIManager;
 import javax.swing.border.EmptyBorder;
+import java.awt.BasicStroke;
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.Component;
 import java.awt.Cursor;
 import java.awt.Desktop;
 import java.awt.Dimension;
 import java.awt.FileDialog;
 import java.awt.Font;
+import java.awt.FlowLayout;
+import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Image;
+import java.awt.Insets;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.Toolkit;
@@ -99,17 +104,17 @@ final class PdfStitcherFrame extends JFrame {
     private final JScrollPane listScrollPane = new JScrollPane(pdfList);
     private final JLabel emptyStateLabel = new JLabel();
     private final JLabel statusLabel = new JLabel("Starting PDF-StitchUI...");
-    private final JButton addButton = new JButton("Add PDFs");
-    private final JButton addFolderButton = new JButton("Add Folder");
-    private final JButton duplicateButton = new JButton("Duplicate");
-    private final JButton pageRangeButton = new JButton("Set Pages");
-    private final JButton rotateLeftButton = new JButton("Rotate Left");
-    private final JButton rotateRightButton = new JButton("Rotate Right");
-    private final JButton moveLeftButton = new JButton("Move Left");
-    private final JButton moveRightButton = new JButton("Move Right");
-    private final JButton removeSelectedButton = new JButton("Remove Selected");
-    private final JButton clearAllButton = new JButton("Clear All");
-    private final JButton exportButton = new JButton("Export Stitched PDF");
+    private final JButton addButton = new JButton();
+    private final JButton addFolderButton = new JButton();
+    private final JButton duplicateButton = new JButton();
+    private final JButton pageRangeButton = new JButton();
+    private final JButton rotateLeftButton = new JButton();
+    private final JButton rotateRightButton = new JButton();
+    private final JButton moveLeftButton = new JButton();
+    private final JButton moveRightButton = new JButton();
+    private final JButton removeSelectedButton = new JButton();
+    private final JButton clearAllButton = new JButton();
+    private final JButton exportButton = new JButton();
     private final TransferHandler fileImportHandler = new FileImportTransferHandler();
 
     private boolean uiBusy;
@@ -199,55 +204,90 @@ final class PdfStitcherFrame extends JFrame {
 
         JLabel subtitle = new JLabel("Tile, tune, reorder, and export PDFs with page ranges, rotation, and save-time options.");
         subtitle.setForeground(new Color(84, 96, 115));
-        subtitle.setBorder(BorderFactory.createEmptyBorder(6, 0, 14, 0));
+        subtitle.setBorder(BorderFactory.createEmptyBorder(6, 0, 16, 0));
 
-        JToolBar toolbar = new JToolBar();
-        toolbar.setOpaque(false);
-        toolbar.setFloatable(false);
-        toolbar.setBorder(BorderFactory.createEmptyBorder());
+        configureActionButton(addButton, "Add PDF files", "Choose one or more PDF files to add to the collection.", ToolbarGlyph.ADD_FILE, false);
+        configureActionButton(addFolderButton, "Add folder", "Import every PDF found in a folder, including nested folders.", ToolbarGlyph.ADD_FOLDER, false);
+        configureActionButton(duplicateButton, "Duplicate selected", "Create another copy of the selected tile and keep its current settings.", ToolbarGlyph.DUPLICATE, false);
+        configureActionButton(pageRangeButton, "Set page range", "Limit the selected tile to specific pages like 1-3, 7.", ToolbarGlyph.PAGE_RANGE, false);
+        configureActionButton(rotateLeftButton, "Rotate left", "Rotate the selected tile 90 degrees counterclockwise.", ToolbarGlyph.ROTATE_LEFT, false);
+        configureActionButton(rotateRightButton, "Rotate right", "Rotate the selected tile 90 degrees clockwise.", ToolbarGlyph.ROTATE_RIGHT, false);
+        configureActionButton(moveLeftButton, "Move earlier", "Move the selected tile earlier in the sequence.", ToolbarGlyph.MOVE_LEFT, false);
+        configureActionButton(moveRightButton, "Move later", "Move the selected tile later in the sequence.", ToolbarGlyph.MOVE_RIGHT, false);
+        configureActionButton(removeSelectedButton, "Remove selected", "Remove the selected tiles from the collection.", ToolbarGlyph.REMOVE, false);
+        configureActionButton(clearAllButton, "Clear all", "Remove every tile from the current collection.", ToolbarGlyph.CLEAR_ALL, false);
+        configureActionButton(exportButton, "Export stitched PDF", "Build the stitched PDF and open the Save As dialog.", ToolbarGlyph.EXPORT, true);
 
-        for (JButton button : List.of(
-                addButton,
-                addFolderButton,
-                duplicateButton,
-                pageRangeButton,
-                rotateLeftButton,
-                rotateRightButton,
-                moveLeftButton,
-                moveRightButton,
-                removeSelectedButton,
-                clearAllButton,
-                exportButton
-        )) {
-            button.setFocusable(false);
-        }
-
-        toolbar.add(addButton);
-        toolbar.add(Box.createHorizontalStrut(8));
-        toolbar.add(addFolderButton);
-        toolbar.add(Box.createHorizontalStrut(16));
-        toolbar.add(duplicateButton);
-        toolbar.add(Box.createHorizontalStrut(8));
-        toolbar.add(pageRangeButton);
-        toolbar.add(Box.createHorizontalStrut(8));
-        toolbar.add(rotateLeftButton);
-        toolbar.add(Box.createHorizontalStrut(8));
-        toolbar.add(rotateRightButton);
-        toolbar.add(Box.createHorizontalStrut(16));
-        toolbar.add(moveLeftButton);
-        toolbar.add(Box.createHorizontalStrut(8));
-        toolbar.add(moveRightButton);
-        toolbar.add(Box.createHorizontalStrut(16));
-        toolbar.add(removeSelectedButton);
-        toolbar.add(Box.createHorizontalStrut(8));
-        toolbar.add(clearAllButton);
-        toolbar.add(Box.createHorizontalStrut(16));
-        toolbar.add(exportButton);
+        JPanel actionStrip = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 0));
+        actionStrip.setOpaque(false);
+        actionStrip.add(buildActionGroup("Import", addButton, addFolderButton));
+        actionStrip.add(buildActionGroup("Adjust", duplicateButton, pageRangeButton, rotateLeftButton, rotateRightButton));
+        actionStrip.add(buildActionGroup("Sequence", moveLeftButton, moveRightButton));
+        actionStrip.add(buildActionGroup("Cleanup", removeSelectedButton, clearAllButton));
+        actionStrip.add(buildActionGroup("Export", exportButton));
 
         wrapper.add(title);
         wrapper.add(subtitle);
-        wrapper.add(toolbar);
+        wrapper.add(actionStrip);
         return wrapper;
+    }
+
+    private JPanel buildActionGroup(String title, JButton... buttons) {
+        JPanel group = new JPanel();
+        group.setOpaque(true);
+        group.setBackground(new Color(255, 255, 255, 225));
+        group.setLayout(new BoxLayout(group, BoxLayout.Y_AXIS));
+        group.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(216, 225, 236)),
+                BorderFactory.createEmptyBorder(10, 12, 12, 12)
+        ));
+
+        JLabel titleLabel = new JLabel(title);
+        titleLabel.setForeground(new Color(66, 79, 101));
+        titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 12f));
+        titleLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        row.setOpaque(false);
+        row.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        for (JButton button : buttons) {
+            row.add(button);
+        }
+
+        group.add(titleLabel);
+        group.add(Box.createVerticalStrut(10));
+        group.add(row);
+        return group;
+    }
+
+    private void configureActionButton(JButton button, String accessibleName, String tooltip, ToolbarGlyph glyph, boolean accent) {
+        button.setFocusable(false);
+        button.setText(null);
+        button.setToolTipText(tooltip);
+        button.getAccessibleContext().setAccessibleName(accessibleName);
+        button.setHorizontalAlignment(SwingConstants.CENTER);
+        button.setVerticalAlignment(SwingConstants.CENTER);
+        button.setMargin(new Insets(0, 0, 0, 0));
+        button.setPreferredSize(new Dimension(44, 44));
+        button.setMinimumSize(new Dimension(44, 44));
+        button.setMaximumSize(new Dimension(44, 44));
+        button.setOpaque(true);
+        button.setBorderPainted(true);
+        button.setFocusPainted(false);
+        button.setContentAreaFilled(true);
+        button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        button.setBackground(accent ? new Color(35, 107, 216) : Color.WHITE);
+        button.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(accent ? new Color(26, 86, 182) : new Color(203, 214, 229)),
+                BorderFactory.createEmptyBorder(10, 10, 10, 10)
+        ));
+        button.setIcon(createToolbarIcon(glyph, accent ? Color.WHITE : new Color(54, 77, 111)));
+        button.setDisabledIcon(createToolbarIcon(glyph, new Color(165, 174, 189)));
+    }
+
+    private Icon createToolbarIcon(ToolbarGlyph glyph, Color color) {
+        return new ToolbarIcon(glyph, color);
     }
 
     private JComponent buildCenterPanel() {
@@ -1289,6 +1329,142 @@ final class PdfStitcherFrame extends JFrame {
             Thread thread = new Thread(runnable, "pdf-stitchui-worker-" + threadCount++);
             thread.setDaemon(true);
             return thread;
+        }
+    }
+
+    private enum ToolbarGlyph {
+        ADD_FILE,
+        ADD_FOLDER,
+        DUPLICATE,
+        PAGE_RANGE,
+        ROTATE_LEFT,
+        ROTATE_RIGHT,
+        MOVE_LEFT,
+        MOVE_RIGHT,
+        REMOVE,
+        CLEAR_ALL,
+        EXPORT
+    }
+
+    private static final class ToolbarIcon implements Icon {
+        private final ToolbarGlyph glyph;
+        private final Color color;
+
+        private ToolbarIcon(ToolbarGlyph glyph, Color color) {
+            this.glyph = glyph;
+            this.color = color;
+        }
+
+        @Override
+        public void paintIcon(Component component, Graphics graphics, int x, int y) {
+            Graphics2D g2 = (Graphics2D) graphics.create();
+            g2.translate(x, y);
+            g2.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setRenderingHint(java.awt.RenderingHints.KEY_STROKE_CONTROL, java.awt.RenderingHints.VALUE_STROKE_PURE);
+            g2.setColor(color);
+            g2.setStroke(new BasicStroke(2.1f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+
+            switch (glyph) {
+                case ADD_FILE -> paintAddFile(g2);
+                case ADD_FOLDER -> paintAddFolder(g2);
+                case DUPLICATE -> paintDuplicate(g2);
+                case PAGE_RANGE -> paintPageRange(g2);
+                case ROTATE_LEFT -> paintRotateLeft(g2);
+                case ROTATE_RIGHT -> paintRotateRight(g2);
+                case MOVE_LEFT -> paintMoveLeft(g2);
+                case MOVE_RIGHT -> paintMoveRight(g2);
+                case REMOVE -> paintRemove(g2);
+                case CLEAR_ALL -> paintClearAll(g2);
+                case EXPORT -> paintExport(g2);
+            }
+
+            g2.dispose();
+        }
+
+        @Override
+        public int getIconWidth() {
+            return 20;
+        }
+
+        @Override
+        public int getIconHeight() {
+            return 20;
+        }
+
+        private void paintAddFile(Graphics2D g2) {
+            g2.drawRoundRect(3, 2, 12, 16, 3, 3);
+            g2.drawLine(9, 6, 9, 14);
+            g2.drawLine(5, 10, 13, 10);
+            g2.drawLine(11, 2, 15, 6);
+        }
+
+        private void paintAddFolder(Graphics2D g2) {
+            g2.drawRoundRect(2, 6, 16, 10, 3, 3);
+            g2.drawLine(4, 6, 7, 3);
+            g2.drawLine(7, 3, 11, 3);
+            g2.drawLine(12, 9, 12, 15);
+            g2.drawLine(9, 12, 15, 12);
+        }
+
+        private void paintDuplicate(Graphics2D g2) {
+            g2.drawRoundRect(5, 3, 10, 12, 3, 3);
+            g2.drawRoundRect(2, 6, 10, 12, 3, 3);
+        }
+
+        private void paintPageRange(Graphics2D g2) {
+            g2.drawRoundRect(3, 2, 14, 16, 3, 3);
+            g2.drawLine(6, 7, 14, 7);
+            g2.drawLine(6, 11, 10, 11);
+            g2.drawLine(12, 11, 14, 11);
+            g2.drawLine(6, 15, 14, 15);
+        }
+
+        private void paintRotateLeft(Graphics2D g2) {
+            g2.drawRoundRect(9, 3, 7, 11, 2, 2);
+            g2.drawArc(1, 5, 12, 12, 35, 235);
+            g2.drawLine(2, 10, 2, 5);
+            g2.drawLine(2, 10, 7, 10);
+        }
+
+        private void paintRotateRight(Graphics2D g2) {
+            g2.drawRoundRect(4, 3, 7, 11, 2, 2);
+            g2.drawArc(7, 5, 12, 12, 270, 235);
+            g2.drawLine(18, 10, 18, 5);
+            g2.drawLine(13, 10, 18, 10);
+        }
+
+        private void paintMoveLeft(Graphics2D g2) {
+            g2.drawLine(17, 10, 5, 10);
+            g2.drawLine(9, 6, 5, 10);
+            g2.drawLine(9, 14, 5, 10);
+        }
+
+        private void paintMoveRight(Graphics2D g2) {
+            g2.drawLine(3, 10, 15, 10);
+            g2.drawLine(11, 6, 15, 10);
+            g2.drawLine(11, 14, 15, 10);
+        }
+
+        private void paintRemove(Graphics2D g2) {
+            g2.drawOval(3, 3, 14, 14);
+            g2.drawLine(7, 7, 13, 13);
+            g2.drawLine(13, 7, 7, 13);
+        }
+
+        private void paintClearAll(Graphics2D g2) {
+            g2.drawLine(4, 6, 16, 6);
+            g2.drawLine(6, 6, 7, 17);
+            g2.drawLine(14, 6, 13, 17);
+            g2.drawLine(8, 9, 8, 15);
+            g2.drawLine(12, 9, 12, 15);
+            g2.drawRoundRect(5, 4, 10, 2, 1, 1);
+        }
+
+        private void paintExport(Graphics2D g2) {
+            g2.drawLine(10, 3, 10, 13);
+            g2.drawLine(6, 9, 10, 13);
+            g2.drawLine(14, 9, 10, 13);
+            g2.drawLine(4, 16, 16, 16);
         }
     }
 }
