@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -37,14 +38,11 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            script: packaging/windows/package.ps1
-            shell: pwsh
+            command: pwsh -File packaging/windows/package.ps1
           - os: ubuntu-latest
-            script: packaging/linux/package.sh
-            shell: bash
+            command: bash packaging/linux/package.sh
           - os: macos-latest
-            script: packaging/macos/package.sh
-            shell: bash
+            command: bash packaging/macos/package.sh
     runs-on: ${{ matrix.os }}
     steps:
       - name: Check out repository
@@ -61,8 +59,7 @@ jobs:
         run: ./mvnw -B package
 
       - name: Create native package
-        run: ${{ matrix.script }}
-        shell: ${{ matrix.shell }}
+        run: ${{ matrix.command }}
 
       - name: Upload native artifacts
         uses: actions/upload-artifact@v4
