@@ -2,3 +2,10 @@ target/
 dist/
 tools/
 *.log
+
+# Branding guidance:
+# - Commit curated brand briefs and selected concept assets under branding/
+# - Keep temporary explorations, exports, and scratch renders out of git
+branding/tmp/
+branding/wip/
+branding/exports/

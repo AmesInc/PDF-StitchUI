@@ -13,6 +13,21 @@ It is built for native desktop use rather than the browser. On Windows, the app 
 
 Both workflows are designed around validation before export so users can catch issues before writing files.
 
+## Branding
+
+The selected product identity direction is:
+
+- concept: `Tile Sequence`
+- variant: `Balanced`
+
+This brand direction emphasizes the core stitch workflow: ordered document tiles resolving into one final assembled PDF.
+
+Branding reference materials live under [branding/](C:/Users/ameli/OneDrive/Documents/New%20project%202/branding), including:
+
+- [branding/decision.md](C:/Users/ameli/OneDrive/Documents/New%20project%202/branding/decision.md)
+- [branding/brand-brief.md](C:/Users/ameli/OneDrive/Documents/New%20project%202/branding/brand-brief.md)
+- [branding/refinement-prompt.md](C:/Users/ameli/OneDrive/Documents/New%20project%202/branding/refinement-prompt.md)
+
 ## Features
 
 ### Stitch Mode
@@ -199,6 +214,8 @@ Platform packaging scripts live under [`packaging/`](C:/Users/ameli/OneDrive/Doc
 
 Additional notes are in [packaging/README.md](C:/Users/ameli/OneDrive/Documents/New%20project%202/packaging/README.md).
 
+Current packaging should be treated as structurally ready for branded icons and installer assets. Final branded production assets should follow the selected `Tile Sequence / Balanced` direction in [branding/decision.md](C:/Users/ameli/OneDrive/Documents/New%20project%202/branding/decision.md).
+
 ### Windows
 
 Build the Windows package with:
@@ -267,6 +284,7 @@ Repository expectations:
 - keep CI green
 - route changes through PR review
 - repository owners review merges
+- align user-facing visual identity changes with the committed branding guidance under [branding/](C:/Users/ameli/OneDrive/Documents/New%20project%202/branding)
 
 See [CONTRIBUTING.md](C:/Users/ameli/OneDrive/Documents/New%20project%202/CONTRIBUTING.md) for repository guidance.
 

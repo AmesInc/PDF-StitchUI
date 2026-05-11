@@ -1,5 +1,14 @@
 # Packaging
 
+Packaging work should align with the committed branding direction in [../branding/decision.md](C:/Users/ameli/OneDrive/Documents/New%20project%202/branding/decision.md).
+
+Current selected direction:
+
+- concept: `Tile Sequence`
+- variant: `Balanced`
+
+When replacing placeholder or interim package visuals, prefer assets derived from the committed branding materials under [../branding/](C:/Users/ameli/OneDrive/Documents/New%20project%202/branding).
+
 ## Windows
 
 Use [windows/package.ps1](C:/Users/ameli/OneDrive/Documents/New%20project%202/packaging/windows/package.ps1) to build a Windows app-image and MSI with `jpackage`.

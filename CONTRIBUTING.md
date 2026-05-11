@@ -26,3 +26,10 @@ Thanks for contributing to `PDF-StitchUI`.
 - Keep pull requests focused.
 - Call out any UI behavior changes with screenshots or a short screen recording when practical.
 - Document follow-up work rather than hiding it inside TODO comments.
+
+## Branding
+
+- Treat [branding/](C:/Users/ameli/OneDrive/Documents/New%20project%202/branding) as the source of truth for visual identity work.
+- The current selected direction is `Tile Sequence / Balanced`.
+- Keep committed brand briefs, decisions, and selected concept assets under `branding/`.
+- Keep scratch branding work in the ignored folders described by [.gitignore](C:/Users/ameli/OneDrive/Documents/New%20project%202/.gitignore).
