@@ -20,8 +20,8 @@ import java.awt.Insets;
 import java.awt.RenderingHints;
 
 final class PdfTileRenderer extends JPanel implements ListCellRenderer<PdfEntry> {
-    static final int CELL_WIDTH = 232;
-    static final int CELL_HEIGHT = 310;
+    static final int CELL_WIDTH = 246;
+    static final int CELL_HEIGHT = 354;
     static final int CARD_MARGIN = 10;
     static final int REMOVE_SIZE = 28;
 
@@ -29,7 +29,9 @@ final class PdfTileRenderer extends JPanel implements ListCellRenderer<PdfEntry>
     private final JLabel removeLabel = new JLabel("\u00d7", SwingConstants.CENTER);
     private final JLabel thumbnailLabel = new JLabel("", SwingConstants.CENTER);
     private final JLabel fileNameLabel = new JLabel();
-    private final JLabel statusLabel = new JLabel();
+    private final JLabel metadataLabel = new JLabel();
+    private final JLabel configLabel = new JLabel();
+    private final JLabel badgeLabel = new JLabel();
 
     private boolean selected;
 
@@ -55,27 +57,42 @@ final class PdfTileRenderer extends JPanel implements ListCellRenderer<PdfEntry>
         headerPanel.add(sequenceLabel, BorderLayout.WEST);
         headerPanel.add(removeLabel, BorderLayout.EAST);
 
-        thumbnailLabel.setPreferredSize(new Dimension(170, 188));
+        thumbnailLabel.setPreferredSize(new Dimension(180, 188));
         thumbnailLabel.setBorder(BorderFactory.createEmptyBorder(16, 12, 12, 12));
         thumbnailLabel.setVerticalAlignment(SwingConstants.CENTER);
         thumbnailLabel.setHorizontalAlignment(SwingConstants.CENTER);
+        thumbnailLabel.setOpaque(true);
+        thumbnailLabel.setBackground(new Color(249, 251, 255));
 
         fileNameLabel.setVerticalAlignment(SwingConstants.TOP);
         fileNameLabel.setFont(fileNameLabel.getFont().deriveFont(Font.BOLD, 13f));
         fileNameLabel.setBorder(BorderFactory.createEmptyBorder(4, 0, 0, 0));
 
-        statusLabel.setFont(statusLabel.getFont().deriveFont(12f));
-        statusLabel.setForeground(new Color(86, 94, 110));
+        metadataLabel.setFont(metadataLabel.getFont().deriveFont(12f));
+        metadataLabel.setForeground(new Color(86, 94, 110));
+
+        configLabel.setFont(configLabel.getFont().deriveFont(12f));
+        configLabel.setForeground(new Color(72, 81, 95));
+
+        badgeLabel.setFont(badgeLabel.getFont().deriveFont(Font.BOLD, 11f));
+        badgeLabel.setOpaque(true);
+        badgeLabel.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
 
         JPanel footerPanel = new JPanel();
         footerPanel.setOpaque(false);
         footerPanel.setLayout(new BoxLayout(footerPanel, BoxLayout.Y_AXIS));
         footerPanel.setBorder(BorderFactory.createEmptyBorder(0, 16, 16, 16));
         fileNameLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-        statusLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        metadataLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        configLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        badgeLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
         footerPanel.add(fileNameLabel);
         footerPanel.add(Box.createVerticalStrut(6));
-        footerPanel.add(statusLabel);
+        footerPanel.add(metadataLabel);
+        footerPanel.add(Box.createVerticalStrut(4));
+        footerPanel.add(configLabel);
+        footerPanel.add(Box.createVerticalStrut(8));
+        footerPanel.add(badgeLabel);
 
         add(headerPanel, BorderLayout.NORTH);
         add(thumbnailLabel, BorderLayout.CENTER);
@@ -92,12 +109,23 @@ final class PdfTileRenderer extends JPanel implements ListCellRenderer<PdfEntry>
     ) {
         selected = isSelected;
 
+        boolean hoveringRemove = index == readIndexProperty(list, "removeHoverIndex");
+        boolean pressingRemove = index == readIndexProperty(list, "removePressedIndex");
+
         sequenceLabel.setText(String.format("Sequence %d", index + 1));
         sequenceLabel.setBackground(isSelected ? new Color(215, 233, 255) : new Color(239, 243, 250));
         sequenceLabel.setForeground(new Color(36, 58, 92));
 
-        removeLabel.setBackground(isSelected ? new Color(255, 227, 227) : new Color(246, 247, 250));
-        removeLabel.setForeground(new Color(140, 24, 24));
+        if (pressingRemove) {
+            removeLabel.setBackground(new Color(221, 81, 81));
+            removeLabel.setForeground(Color.WHITE);
+        } else if (hoveringRemove) {
+            removeLabel.setBackground(new Color(255, 219, 219));
+            removeLabel.setForeground(new Color(140, 24, 24));
+        } else {
+            removeLabel.setBackground(isSelected ? new Color(255, 227, 227) : new Color(246, 247, 250));
+            removeLabel.setForeground(new Color(140, 24, 24));
+        }
 
         Icon thumbnail = value.getThumbnail();
         if (thumbnail != null) {
@@ -110,7 +138,22 @@ final class PdfTileRenderer extends JPanel implements ListCellRenderer<PdfEntry>
         }
 
         fileNameLabel.setText(toHtml(value.getDisplayName()));
-        statusLabel.setText(value.isLoadingThumbnail() ? "Rendering preview..." : value.getPath().toAbsolutePath().toString());
+        metadataLabel.setText(value.getMetadataSummary());
+        configLabel.setText(value.getConfigSummary());
+
+        if (value.hasBlockingIssue()) {
+            badgeLabel.setText(value.getBlockingIssue());
+            badgeLabel.setForeground(new Color(132, 27, 27));
+            badgeLabel.setBackground(new Color(255, 232, 232));
+        } else if (value.hasAdvisory()) {
+            badgeLabel.setText(value.getAdvisoryMessage());
+            badgeLabel.setForeground(new Color(130, 66, 7));
+            badgeLabel.setBackground(new Color(255, 240, 214));
+        } else {
+            badgeLabel.setText("Ready to export");
+            badgeLabel.setForeground(new Color(34, 95, 54));
+            badgeLabel.setBackground(new Color(223, 244, 231));
+        }
 
         return this;
     }
@@ -144,12 +187,16 @@ final class PdfTileRenderer extends JPanel implements ListCellRenderer<PdfEntry>
         return CARD_MARGIN + 6;
     }
 
+    private int readIndexProperty(JList<? extends PdfEntry> list, String propertyName) {
+        Object property = list.getClientProperty(propertyName);
+        return property instanceof Integer value ? value : -1;
+    }
+
     private String toHtml(String text) {
         String escaped = text
                 .replace("&", "&amp;")
                 .replace("<", "&lt;")
                 .replace(">", "&gt;");
-        return "<html><div style='width:170px;'>" + escaped + "</div></html>";
+        return "<html><div style='width:182px;'>" + escaped + "</div></html>";
     }
 }
-

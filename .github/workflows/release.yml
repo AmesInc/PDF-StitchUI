@@ -1,0 +1,96 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-jar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+
+      - name: Build shaded jar
+        run: ./mvnw -B package
+
+      - name: Upload jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: pdf-stitchui-jar
+          path: target/pdf-stitchui-1.0.0-SNAPSHOT.jar
+
+  package-native:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            script: packaging/windows/package.ps1
+            shell: pwsh
+          - os: ubuntu-latest
+            script: packaging/linux/package.sh
+            shell: bash
+          - os: macos-latest
+            script: packaging/macos/package.sh
+            shell: bash
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+
+      - name: Build package
+        run: ./mvnw -B package
+
+      - name: Create native package
+        run: ${{ matrix.script }}
+        shell: ${{ matrix.shell }}
+
+      - name: Upload native artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.os }}
+          path: dist/**
+
+  publish-release:
+    needs:
+      - build-jar
+      - package-native
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download jar
+        uses: actions/download-artifact@v4
+        with:
+          name: pdf-stitchui-jar
+          path: release-assets/jar
+
+      - name: Download native packages
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets/native
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release-assets/jar/**
+            release-assets/native/**
+
