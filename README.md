@@ -4,7 +4,7 @@
 
 It is built for native desktop use rather than the browser. On Windows, the app uses native file dialogs where standard Java supports them, so common shell locations such as OneDrive are available during file open and save flows.
 
-![PDF-StitchUI Tile Sequence branding concept](branding/concepts/tile-sequence-balanced-round2-board.png)
+![PDF-StitchUI Tile Sequence balanced branding](branding/social/github-social-preview-v1.png)
 
 ## What It Does
 
