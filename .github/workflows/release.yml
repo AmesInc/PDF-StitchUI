@@ -90,10 +90,19 @@ jobs:
         with:
           path: release-assets/native
 
+      - name: Prepare release archives
+        run: |
+          mkdir -p release-assets/publish
+          cp release-assets/jar/*.jar release-assets/publish/
+
+          cd release-assets/native
+          for artifact_dir in */ ; do
+            artifact_name="${artifact_dir%/}"
+            zip -r "../publish/${artifact_name}.zip" "$artifact_name"
+          done
+
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            release-assets/jar/**
-            release-assets/native/**
+          files: release-assets/publish/**
 
