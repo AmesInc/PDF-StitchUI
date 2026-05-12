@@ -15,21 +15,6 @@ It is built for native desktop use rather than the browser. On Windows, the app 
 
 Both workflows are designed around validation before export so users can catch issues before writing files.
 
-## Branding
-
-The selected product identity direction is:
-
-- concept: `Tile Sequence`
-- variant: `Balanced`
-
-This brand direction emphasizes the core stitch workflow: ordered document tiles resolving into one final assembled PDF.
-
-Branding reference materials live under [branding/](C:/Users/ameli/OneDrive/Documents/New%20project%202/branding), including:
-
-- [branding/decision.md](C:/Users/ameli/OneDrive/Documents/New%20project%202/branding/decision.md)
-- [branding/brand-brief.md](C:/Users/ameli/OneDrive/Documents/New%20project%202/branding/brand-brief.md)
-- [branding/refinement-prompt.md](C:/Users/ameli/OneDrive/Documents/New%20project%202/branding/refinement-prompt.md)
-
 ## Features
 
 ### Stitch Mode
@@ -212,11 +197,9 @@ These apply to the stitch tile workspace:
 
 ## Packaging
 
-Platform packaging scripts live under [`packaging/`](C:/Users/ameli/OneDrive/Documents/New%20project%202/packaging).
+Platform packaging scripts live under [packaging/](packaging/).
 
-Additional notes are in [packaging/README.md](C:/Users/ameli/OneDrive/Documents/New%20project%202/packaging/README.md).
-
-Current packaging should be treated as structurally ready for branded icons and installer assets. Final branded production assets should follow the selected `Tile Sequence / Balanced` direction in [branding/decision.md](C:/Users/ameli/OneDrive/Documents/New%20project%202/branding/decision.md).
+Additional notes are in [packaging/README.md](packaging/README.md).
 
 ### Windows
 
@@ -246,14 +229,14 @@ Build from Linux with:
 
 ## Project Structure
 
-- [src/main/java/com/ameli/pdfstitcher/PdfStitcherApp.java](C:/Users/ameli/OneDrive/Documents/New%20project%202/src/main/java/com/ameli/pdfstitcher/PdfStitcherApp.java): application entry point and single-instance coordination
-- [src/main/java/com/ameli/pdfstitcher/PdfStitcherFrame.java](C:/Users/ameli/OneDrive/Documents/New%20project%202/src/main/java/com/ameli/pdfstitcher/PdfStitcherFrame.java): main frame and stitch-mode UI
-- [src/main/java/com/ameli/pdfstitcher/PdfTileRenderer.java](C:/Users/ameli/OneDrive/Documents/New%20project%202/src/main/java/com/ameli/pdfstitcher/PdfTileRenderer.java): stitch tile rendering
-- [src/main/java/com/ameli/pdfstitcher/PdfTileList.java](C:/Users/ameli/OneDrive/Documents/New%20project%202/src/main/java/com/ameli/pdfstitcher/PdfTileList.java): drag/drop list behavior for stitch tiles
-- [src/main/java/com/ameli/pdfstitcher/PageRangeParser.java](C:/Users/ameli/OneDrive/Documents/New%20project%202/src/main/java/com/ameli/pdfstitcher/PageRangeParser.java): shared page-range parser
-- [src/main/java/com/ameli/pdfstitcher/SplitPanel.java](C:/Users/ameli/OneDrive/Documents/New%20project%202/src/main/java/com/ameli/pdfstitcher/SplitPanel.java): split-mode UI
-- [src/main/java/com/ameli/pdfstitcher/SplitAllocator.java](C:/Users/ameli/OneDrive/Documents/New%20project%202/src/main/java/com/ameli/pdfstitcher/SplitAllocator.java): split validation and page-allocation analysis
-- [src/main/java/com/ameli/pdfstitcher/SplitExporter.java](C:/Users/ameli/OneDrive/Documents/New%20project%202/src/main/java/com/ameli/pdfstitcher/SplitExporter.java): split export engine
+- [src/main/java/com/ameli/pdfstitcher/PdfStitcherApp.java](src/main/java/com/ameli/pdfstitcher/PdfStitcherApp.java): application entry point and single-instance coordination
+- [src/main/java/com/ameli/pdfstitcher/PdfStitcherFrame.java](src/main/java/com/ameli/pdfstitcher/PdfStitcherFrame.java): main frame and stitch-mode UI
+- [src/main/java/com/ameli/pdfstitcher/PdfTileRenderer.java](src/main/java/com/ameli/pdfstitcher/PdfTileRenderer.java): stitch tile rendering
+- [src/main/java/com/ameli/pdfstitcher/PdfTileList.java](src/main/java/com/ameli/pdfstitcher/PdfTileList.java): drag/drop list behavior for stitch tiles
+- [src/main/java/com/ameli/pdfstitcher/PageRangeParser.java](src/main/java/com/ameli/pdfstitcher/PageRangeParser.java): shared page-range parser
+- [src/main/java/com/ameli/pdfstitcher/SplitPanel.java](src/main/java/com/ameli/pdfstitcher/SplitPanel.java): split-mode UI
+- [src/main/java/com/ameli/pdfstitcher/SplitAllocator.java](src/main/java/com/ameli/pdfstitcher/SplitAllocator.java): split validation and page-allocation analysis
+- [src/main/java/com/ameli/pdfstitcher/SplitExporter.java](src/main/java/com/ameli/pdfstitcher/SplitExporter.java): split export engine
 
 ## Dependencies
 
@@ -286,12 +269,10 @@ Repository expectations:
 - keep CI green
 - route changes through PR review
 - repository owners review merges
-- align user-facing visual identity changes with the committed branding guidance under [branding/](C:/Users/ameli/OneDrive/Documents/New%20project%202/branding)
-
-See [CONTRIBUTING.md](C:/Users/ameli/OneDrive/Documents/New%20project%202/CONTRIBUTING.md) for repository guidance.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for repository guidance.
 
 ## License
 
-The application source is released under the MIT License. See [LICENSE](C:/Users/ameli/OneDrive/Documents/New%20project%202/LICENSE).
+The application source is released under the MIT License. See [LICENSE](LICENSE).
 
-Dependency attribution is documented in [THIRD_PARTY_NOTICES.md](C:/Users/ameli/OneDrive/Documents/New%20project%202/THIRD_PARTY_NOTICES.md).
+Dependency attribution is documented in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
