@@ -5,6 +5,7 @@
 This project depends on:
 
 - Apache PDFBox, licensed under Apache License 2.0
+- Apache PDFBox IO, licensed under Apache License 2.0
 - Apache FontBox, licensed under Apache License 2.0
 - Commons Logging, licensed under Apache License 2.0
 
@@ -13,4 +14,3 @@ When distributing the built application, preserve the relevant third-party notic
 Primary dependency project:
 
 - Apache PDFBox: https://pdfbox.apache.org/
-

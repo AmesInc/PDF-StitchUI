@@ -165,7 +165,7 @@ java -jar ./target/pdf-stitchui-1.0.0.jar
 ### Build
 
 ```powershell
-.\mvnw.cmd package
+.\mvnw.cmd verify
 ```
 
 ### Run
@@ -173,6 +173,40 @@ java -jar ./target/pdf-stitchui-1.0.0.jar
 ```powershell
 java -jar .\target\pdf-stitchui-1.0.0.jar
 ```
+
+### Testing And Coverage
+
+```powershell
+.\mvnw.cmd verify
+```
+
+This runs:
+
+- JUnit 5 unit tests
+- JaCoCo coverage reporting
+- a 90% line-coverage gate over the core non-UI logic classes
+
+The coverage gate intentionally excludes the Swing shell and desktop bootstrap classes so the enforced threshold reflects the testable logic layer rather than dialog wiring and rendering code.
+
+JaCoCo HTML output is written to:
+
+- `target/site/jacoco/index.html`
+
+### SonarQube Cloud
+
+The repository includes [.github/workflows/sonar.yml](.github/workflows/sonar.yml) for SonarQube Cloud analysis.
+
+To enable it in GitHub:
+
+1. Import the repository into SonarQube Cloud.
+2. Add repository variables:
+   - `SONAR_PROJECT_KEY`
+   - `SONAR_ORGANIZATION`
+3. Add repository secret:
+   - `SONAR_TOKEN`
+4. Add the SonarQube Cloud quality gate status as a required check in branch protection if you want merge blocking on quality results.
+
+Until those GitHub variables and secrets are present, the Sonar workflow will skip itself.
 
 ### Smoke Test Areas
 

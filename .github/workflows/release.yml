@@ -79,6 +79,9 @@ jobs:
       - package-native
     runs-on: ubuntu-latest
     steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
       - name: Download jar
         uses: actions/download-artifact@v4
         with:
@@ -94,6 +97,7 @@ jobs:
         run: |
           mkdir -p release-assets/publish
           cp release-assets/jar/*.jar release-assets/publish/
+          cp LICENSE THIRD_PARTY_NOTICES.md release-assets/publish/
 
           cd release-assets/native
           for artifact_dir in */ ; do
