@@ -3,4 +3,6 @@ contact_links:
   - name: Security concerns
     url: https://github.com/AmesInc/PDF-StitchUI/security/policy
     about: Do not open public issues for security-sensitive findings.
-
+  - name: PDF-StitchUI README
+    url: https://github.com/AmesInc/PDF-StitchUI/blob/main/README.md
+    about: Review current product behavior, development workflow, and release notes before filing work.

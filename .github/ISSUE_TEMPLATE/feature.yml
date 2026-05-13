@@ -1,0 +1,81 @@
+name: Feature / Requirement
+description: Create a scoped product, workflow, packaging, or repo-quality requirement.
+title: ""
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this for a single unit of work that can belong under an epic and milestone.
+  - type: input
+    id: summary
+    attributes:
+      label: Summary
+      description: One-sentence description of the requested change.
+      placeholder: Example: Add cull-page allocation to split mode.
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / Opportunity
+      description: What gap, pain point, or opportunity does this work address?
+    validations:
+      required: true
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      options:
+        - workflow
+        - quality
+        - testing
+        - packaging
+        - branding
+        - repo-hygiene
+    validations:
+      required: true
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - p1
+        - p2
+        - p3
+    validations:
+      required: true
+  - type: dropdown
+    id: target-release
+    attributes:
+      label: Target Release
+      options:
+        - v1.1.0
+        - v1.2.0
+        - v2.0.0
+        - future / unassigned
+    validations:
+      required: true
+  - type: input
+    id: parent-epic
+    attributes:
+      label: Parent Epic
+      description: Link the parent epic issue number if this work belongs under one.
+      placeholder: Example: #26
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: List the observable conditions required for completion.
+      placeholder: |
+        - Users can...
+        - Export is blocked when...
+        - The workflow is documented...
+    validations:
+      required: true
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies / Notes
+      description: Optional related issues, technical notes, or sequencing concerns.

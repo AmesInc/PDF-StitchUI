@@ -1,0 +1,75 @@
+name: Epic
+description: Create a large multi-issue body of work with clear outcome and child-issue structure.
+title: "Epic: "
+labels:
+  - epic
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template for major work that spans multiple issues. After creating the epic, add linked child issues in the checklist and apply the correct milestone.
+  - type: input
+    id: objective
+    attributes:
+      label: Objective
+      description: State the product or repo outcome this epic should achieve.
+      placeholder: Example: Turn Split and Stitch into a connected remix workflow.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why
+      description: Explain why this body of work matters now.
+      placeholder: Explain the user or repo problem this epic solves.
+    validations:
+      required: true
+  - type: dropdown
+    id: track
+    attributes:
+      label: Track
+      description: Choose the primary type of work.
+      options:
+        - workflow
+        - quality
+        - packaging
+        - branding
+        - repo-hygiene
+    validations:
+      required: true
+  - type: dropdown
+    id: target-release
+    attributes:
+      label: Target Release
+      description: Which milestone should this epic land in?
+      options:
+        - v1.1.0
+        - v1.2.0
+        - v2.0.0
+        - future / unassigned
+    validations:
+      required: true
+  - type: textarea
+    id: child-issues
+    attributes:
+      label: Child Issues
+      description: Add linked checklist items for the individual requirements or units of work.
+      placeholder: |
+        - [ ] #123
+        - [ ] #124
+  - type: textarea
+    id: exit-criteria
+    attributes:
+      label: Exit Criteria
+      description: Define what must be true before this epic is considered done.
+      placeholder: |
+        - The user can...
+        - CI enforces...
+        - The workflow is documented...
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Optional implementation notes, dependencies, or sequencing guidance.
