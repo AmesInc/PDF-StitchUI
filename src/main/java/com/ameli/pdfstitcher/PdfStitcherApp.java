@@ -15,12 +15,14 @@ public final class PdfStitcherApp {
     }
 
     public static void main(String[] args) {
+        AppDiagnostics.initialize();
         SingleInstanceCoordinator coordinator = SingleInstanceCoordinator.createOrSignalExisting();
         if (coordinator == null) {
             return;
         }
 
         configureLookAndFeel();
+        AppDiagnostics.info("Launching PDF-StitchUI.");
         SwingUtilities.invokeLater(() -> {
             PdfStitcherFrame frame = new PdfStitcherFrame();
             coordinator.setActivationHandler(frame::activateWindow);
