@@ -9,19 +9,35 @@ on:
 
 jobs:
   sonar:
-    if: ${{ vars.SONAR_PROJECT_KEY != '' && vars.SONAR_ORGANIZATION != '' && secrets.SONAR_TOKEN != '' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
       pull-requests: read
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      SONAR_PROJECT_KEY: ${{ vars.SONAR_PROJECT_KEY }}
+      SONAR_ORGANIZATION: ${{ vars.SONAR_ORGANIZATION }}
 
     steps:
+      - name: Check SonarQube Cloud configuration
+        id: sonar-config
+        shell: bash
+        run: |
+          if [[ -n "${SONAR_TOKEN}" && -n "${SONAR_PROJECT_KEY}" && -n "${SONAR_ORGANIZATION}" ]]; then
+            echo "enabled=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "enabled=false" >> "${GITHUB_OUTPUT}"
+            echo "SonarQube Cloud variables or secret are missing; skipping analysis."
+          fi
+
       - name: Check out repository
+        if: steps.sonar-config.outputs.enabled == 'true'
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Set up Java
+        if: steps.sonar-config.outputs.enabled == 'true'
         uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -29,10 +45,9 @@ jobs:
           cache: maven
 
       - name: Analyze with SonarQube Cloud
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        if: steps.sonar-config.outputs.enabled == 'true'
         run: >
           ./mvnw -B verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar
-          -Dsonar.projectKey=${{ vars.SONAR_PROJECT_KEY }}
-          -Dsonar.organization=${{ vars.SONAR_ORGANIZATION }}
+          -Dsonar.projectKey=${{ env.SONAR_PROJECT_KEY }}
+          -Dsonar.organization=${{ env.SONAR_ORGANIZATION }}
           -Dsonar.host.url=https://sonarcloud.io
