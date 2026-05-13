@@ -30,10 +30,8 @@ This project expects `verify` to stay green, which includes:
 ## Quality Gate
 
 - GitHub CI runs `./mvnw -B verify` on pull requests and pushes to `main`.
-- SonarQube Cloud analysis is wired in [.github/workflows/sonar.yml](.github/workflows/sonar.yml).
-- SonarQube Cloud requires repository configuration before it will run:
-  - GitHub variables `SONAR_PROJECT_KEY` and `SONAR_ORGANIZATION`
-  - GitHub secret `SONAR_TOKEN`
+- GitHub CodeQL analysis is wired in [.github/workflows/codeql.yml](.github/workflows/codeql.yml).
+- If you want merge protection from static analysis, add the CodeQL status check to branch protection once the workflow is running on the repository.
 
 ## Scope
 

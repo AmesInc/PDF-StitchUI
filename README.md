@@ -192,21 +192,18 @@ JaCoCo HTML output is written to:
 
 - `target/site/jacoco/index.html`
 
-### SonarQube Cloud
+### Code Scanning
 
-The repository includes [.github/workflows/sonar.yml](.github/workflows/sonar.yml) for SonarQube Cloud analysis.
+The repository includes [.github/workflows/codeql.yml](.github/workflows/codeql.yml) for GitHub CodeQL scanning.
 
-To enable it in GitHub:
+This workflow runs on:
 
-1. Import the repository into SonarQube Cloud.
-2. Add repository variables:
-   - `SONAR_PROJECT_KEY`
-   - `SONAR_ORGANIZATION`
-3. Add repository secret:
-   - `SONAR_TOKEN`
-4. Add the SonarQube Cloud quality gate status as a required check in branch protection if you want merge blocking on quality results.
+- pushes to `main`
+- pull requests targeting `main`
+- a weekly schedule
+- manual dispatch
 
-Until those GitHub variables and secrets are present, the Sonar workflow will skip itself.
+Because this repository is public, GitHub code scanning can run without a separate commercial Sonar setup. If you want merge blocking, add the CodeQL status check to branch protection after the first successful run.
 
 ### Smoke Test Areas
 
