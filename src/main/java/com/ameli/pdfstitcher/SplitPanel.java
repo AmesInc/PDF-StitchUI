@@ -302,6 +302,7 @@ final class SplitPanel extends JPanel {
 
     private void loadSourcePdf(Path path) {
         setBusy(true, "Loading source PDF...");
+        AppDiagnostics.info("Loading split source PDF " + path + ".");
 
         SwingWorker<SourceDetails, Void> worker = new SwingWorker<>() {
             @Override
@@ -325,6 +326,7 @@ final class SplitPanel extends JPanel {
                     sourceNameLabel.setText(details.path().getFileName().toString());
                     sourceMetaLabel.setText(details.pageCount() + (details.pageCount() == 1 ? " page" : " pages") + "  •  " + formatFileSize(details.fileSize()));
                     setBusy(false, "Source PDF loaded. Assign every page before exporting.");
+                    AppDiagnostics.info("Loaded split source PDF " + details.path() + " with " + details.pageCount() + " page(s).");
                     refreshValidation();
                 } catch (Exception exception) {
                     sourcePath = null;
@@ -332,6 +334,7 @@ final class SplitPanel extends JPanel {
                     sourceNameLabel.setText("No source PDF selected");
                     sourceMetaLabel.setText(classifyLoadFailure(exception));
                     setBusy(false, "Could not load source PDF.");
+                    AppDiagnostics.error("Failed to load split source PDF " + path + ".", exception);
                     refreshValidation();
                 }
             }
@@ -410,6 +413,7 @@ final class SplitPanel extends JPanel {
         }
 
         setBusy(true, "Exporting split PDFs...");
+        AppDiagnostics.info("Starting split export to directory " + outputDirectory + ".");
         List<SplitGroup> groupsToExport = new ArrayList<>(tableModel.getGroups());
         SwingWorker<List<Path>, Void> worker = new SwingWorker<>() {
             @Override
@@ -425,6 +429,7 @@ final class SplitPanel extends JPanel {
                     setBusy(false, exportedPaths.size() == 1
                             ? "Exported 1 split PDF."
                             : "Exported " + exportedPaths.size() + " split PDFs.");
+                    AppDiagnostics.info("Completed split export with " + exportedPaths.size() + " file(s) into " + outputDirectory + ".");
                     JOptionPane.showMessageDialog(
                             SplitPanel.this,
                             exportedPaths.stream()
@@ -435,6 +440,7 @@ final class SplitPanel extends JPanel {
                     );
                 } catch (Exception exception) {
                     setBusy(false, "Split export failed.");
+                    AppDiagnostics.error("Split export failed for output directory " + outputDirectory + ".", exception);
                     JOptionPane.showMessageDialog(
                             SplitPanel.this,
                             exception.getCause() == null ? exception.getMessage() : exception.getCause().getMessage(),

@@ -17,6 +17,7 @@ import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
+import javax.swing.JCheckBoxMenuItem;
 import javax.swing.DefaultListModel;
 import javax.swing.Icon;
 import javax.swing.JButton;
@@ -26,6 +27,9 @@ import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JList;
+import javax.swing.JMenu;
+import javax.swing.JMenuBar;
+import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
@@ -129,6 +133,7 @@ final class PdfStitcherFrame extends JFrame {
         setPreferredSize(new Dimension(1360, 900));
 
         buildFrame();
+        setJMenuBar(buildMenuBar());
         registerInteractions();
         refreshState();
 
@@ -195,6 +200,42 @@ final class PdfStitcherFrame extends JFrame {
         root.add(tabbedPane, BorderLayout.CENTER);
 
         setContentPane(root);
+    }
+
+    private JMenuBar buildMenuBar() {
+        JMenuBar menuBar = new JMenuBar();
+
+        JMenu toolsMenu = new JMenu("Tools");
+
+        JCheckBoxMenuItem developerLoggingItem = new JCheckBoxMenuItem("Developer mode logging");
+        developerLoggingItem.setSelected(AppDiagnostics.isDeveloperLoggingEnabled());
+        developerLoggingItem.addActionListener(event -> {
+            boolean enabled = developerLoggingItem.isSelected();
+            AppDiagnostics.setDeveloperLoggingEnabled(enabled);
+            statusLabel.setText(enabled
+                    ? "Developer logging enabled. Troubleshooting logs will be written to disk."
+                    : "Developer logging disabled.");
+        });
+
+        JMenuItem openLogFolderItem = new JMenuItem("Open log folder");
+        openLogFolderItem.addActionListener(event -> {
+            try {
+                AppDiagnostics.openLogDirectory();
+            } catch (IOException exception) {
+                AppDiagnostics.error("Failed to open log folder.", exception);
+                JOptionPane.showMessageDialog(
+                        this,
+                        "Unable to open the log folder.\n\n" + exception.getMessage(),
+                        "Open log folder failed",
+                        JOptionPane.ERROR_MESSAGE
+                );
+            }
+        });
+
+        toolsMenu.add(developerLoggingItem);
+        toolsMenu.add(openLogFolderItem);
+        menuBar.add(toolsMenu);
+        return menuBar;
     }
 
     private JComponent buildStitchPanel() {
@@ -834,6 +875,7 @@ final class PdfStitcherFrame extends JFrame {
     }
 
     private Path writeExport(Path destination, ExportOptions options) throws IOException {
+        AppDiagnostics.info("Starting stitched export to " + destination + ".");
         Path temporaryFile = Files.createTempFile(destination.getParent(), "pdf-stitchui-", ".pdf");
 
         try (PDDocument destinationDocument = new PDDocument()) {
@@ -864,6 +906,7 @@ final class PdfStitcherFrame extends JFrame {
         }
 
         Files.move(temporaryFile, destination, StandardCopyOption.REPLACE_EXISTING);
+        AppDiagnostics.info("Completed stitched export to " + destination + ".");
         return destination;
     }
 
