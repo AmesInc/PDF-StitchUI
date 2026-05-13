@@ -32,8 +32,12 @@ if (Test-Path $inputDir) {
 New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
 New-Item -ItemType Directory -Force -Path $inputDir | Out-Null
 Copy-Item "target\$jarPath" $inputDir
+Copy-Item "LICENSE" $inputDir
+Copy-Item "THIRD_PARTY_NOTICES.md" $inputDir
 
 & jpackage "--type" "app-image" @commonArgs
+Copy-Item "LICENSE" $outputDir
+Copy-Item "THIRD_PARTY_NOTICES.md" $outputDir
 
 $wixOnPath = (Get-Command light.exe -ErrorAction SilentlyContinue) -and (Get-Command candle.exe -ErrorAction SilentlyContinue)
 if ($wixOnPath) {

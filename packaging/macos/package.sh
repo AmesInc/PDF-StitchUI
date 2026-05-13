@@ -13,6 +13,8 @@ rm -rf "$INPUT_DIR"
 mkdir -p "$OUTPUT_DIR"
 mkdir -p "$INPUT_DIR"
 cp "target/$JAR_NAME" "$INPUT_DIR/"
+cp "LICENSE" "$INPUT_DIR/"
+cp "THIRD_PARTY_NOTICES.md" "$INPUT_DIR/"
 
 jpackage_args=(
   --type dmg
@@ -30,3 +32,6 @@ if [[ -f "packaging/assets/pdf-stitchui.icns" ]]; then
 fi
 
 jpackage "${jpackage_args[@]}"
+
+cp "LICENSE" "$OUTPUT_DIR/"
+cp "THIRD_PARTY_NOTICES.md" "$OUTPUT_DIR/"
